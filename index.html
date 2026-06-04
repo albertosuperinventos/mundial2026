@@ -1,485 +1,555 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
-    <title>Copa Mundial FIFA 2026</title>
-    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
-    
-    <script type="module">
-        // ========== CONFIGURACIÓN DE FIREBASE ==========
-        const firebaseConfig = {
-            apiKey: "AIzaSyCzHKSy5fgQIa7fGZV5XQItdPd0DPo6vGU",
-            authDomain: "mundial2026-54749.firebaseapp.com",
-            projectId: "mundial2026-54749",
-            storageBucket: "mundial2026-54749.firebasestorage.app",
-            messagingSenderId: "785303580961",
-            appId: "1:785303580961:web:9c59aeae8974b4988d8e60"
-        };
-        
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
-        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
-        
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        
-        // Generar huella única del dispositivo
-        function obtenerHuellaDispositivo() {
-            const componentes = [navigator.userAgent, screen.width + 'x' + screen.height, screen.colorDepth, navigator.language, new Date().getTimezoneOffset(), navigator.hardwareConcurrency || 0];
-            let hash = 0;
-            const str = componentes.join('|');
-            for (let i = 0; i < str.length; i++) { hash = ((hash << 5) - hash) + str.charCodeAt(i); hash |= 0; }
-            return Math.abs(hash).toString(16);
-        }
-        
-        const huellaActual = obtenerHuellaDispositivo();
-        
-        async function verificarSesionUnica(email, nuevaHuella) {
-            const userRef = doc(db, "sesiones_activas", email);
-            const userSnap = await getDoc(userRef);
-            if (userSnap.exists()) {
-                const datos = userSnap.data();
-                const ultimoAcceso = new Date(datos.ultimoAcceso);
-                const ahora = new Date();
-                const horasDiferencia = (ahora - ultimoAcceso) / (1000 * 60 * 60);
-                if (datos.huella !== nuevaHuella && horasDiferencia < 24) {
-                    return { permitido: false, mensaje: "❌ Esta cuenta ya está activa en otro dispositivo. Solo puede usarse en un dispositivo cada 24 horas." };
-                }
-            }
-            await setDoc(userRef, { huella: nuevaHuella, ultimoAcceso: new Date().toISOString(), email: email }, { merge: true });
-            return { permitido: true };
-        }
-        
-        window.login = async function() {
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-            const errorDiv = document.getElementById('errorMsg');
-            errorDiv.style.display = 'none';
-            if (!email || !password) { errorDiv.textContent = '❌ Completa todos los campos.'; errorDiv.style.display = 'block'; return; }
-            try {
-                const userCredential = await signInWithEmailAndPassword(auth, email, password);
-                const user = userCredential.user;
-                const autorizadoRef = doc(db, "usuarios_autorizados", email);
-                const autorizadoSnap = await getDoc(autorizadoRef);
-                if (!autorizadoSnap.exists() || autorizadoSnap.data().activo !== true) {
-                    errorDiv.textContent = '❌ No tienes acceso autorizado. Contacta con el administrador.';
-                    errorDiv.style.display = 'block';
-                    await signOut(auth);
-                    return;
-                }
-                const sesion = await verificarSesionUnica(email, huellaActual);
-                if (!sesion.permitido) { errorDiv.textContent = sesion.mensaje; errorDiv.style.display = 'block'; await signOut(auth); return; }
-                document.getElementById('loginScreen').style.display = 'none';
-                document.getElementById('appScreen').style.display = 'block';
-                iniciarMundial();
-            } catch(error) {
-                errorDiv.textContent = '❌ Email o contraseña incorrectos.';
-                errorDiv.style.display = 'block';
-            }
-        };
-        
-        window.logout = async function() {
-            const user = auth.currentUser;
-            if (user) { const userRef = doc(db, "sesiones_activas", user.email); await setDoc(userRef, { activo: false, cerrado: new Date().toISOString() }, { merge: true }); }
-            await signOut(auth);
-            document.getElementById('loginScreen').style.display = 'flex';
-            document.getElementById('appScreen').style.display = 'none';
-        };
-        
-        onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                const autorizadoRef = doc(db, "usuarios_autorizados", user.email);
-                const autorizadoSnap = await getDoc(autorizadoRef);
-                if (autorizadoSnap.exists() && autorizadoSnap.data().activo === true) {
-                    const sesion = await verificarSesionUnica(user.email, huellaActual);
-                    if (sesion.permitido) { document.getElementById('loginScreen').style.display = 'none'; document.getElementById('appScreen').style.display = 'block'; iniciarMundial(); return; }
-                }
-                await signOut(auth);
-            }
-            document.getElementById('loginScreen').style.display = 'flex';
-            document.getElementById('appScreen').style.display = 'none';
-        });
-        
-        // ========== DATOS DEL MUNDIAL ==========
-        const EQUIPOS = {
-            'MEX':{nombre:'México',flag:'🇲🇽'},'KOR':{nombre:'Corea del Sur',flag:'🇰🇷'},'CZE':{nombre:'Rep. Checa',flag:'🇨🇿'},'RSA':{nombre:'Sudáfrica',flag:'🇿🇦'},
-            'CAN':{nombre:'Canadá',flag:'🇨🇦'},'SUI':{nombre:'Suiza',flag:'🇨🇭'},'BIH':{nombre:'Bosnia',flag:'🇧🇦'},'QAT':{nombre:'Catar',flag:'🇶🇦'},
-            'BRA':{nombre:'Brasil',flag:'🇧🇷'},'MAR':{nombre:'Marruecos',flag:'🇲🇦'},'SCO':{nombre:'Escocia',flag:'🏴󠁧󠁢󠁳󠁣󠁴󠁿'},'HAI':{nombre:'Haití',flag:'🇭🇹'},
-            'USA':{nombre:'EE.UU.',flag:'🇺🇸'},'AUS':{nombre:'Australia',flag:'🇦🇺'},'TUR':{nombre:'Turquía',flag:'🇹🇷'},'PAR':{nombre:'Paraguay',flag:'🇵🇾'},
-            'GER':{nombre:'Alemania',flag:'🇩🇪'},'CIV':{nombre:'Costa de Marfil',flag:'🇨🇮'},'ECU':{nombre:'Ecuador',flag:'🇪🇨'},'CUW':{nombre:'Curazao',flag:'🇨🇼'},
-            'NED':{nombre:'Países Bajos',flag:'🇳🇱'},'JPN':{nombre:'Japón',flag:'🇯🇵'},'SWE':{nombre:'Suecia',flag:'🇸🇪'},'TUN':{nombre:'Túnez',flag:'🇹🇳'},
-            'BEL':{nombre:'Bélgica',flag:'🇧🇪'},'IRN':{nombre:'Irán',flag:'🇮🇷'},'EGY':{nombre:'Egipto',flag:'🇪🇬'},'NZL':{nombre:'N. Zelanda',flag:'🇳🇿'},
-            'ESP':{nombre:'España',flag:'🇪🇸'},'URU':{nombre:'Uruguay',flag:'🇺🇾'},'KSA':{nombre:'Arabia Saudí',flag:'🇸🇦'},'CPV':{nombre:'Cabo Verde',flag:'🇨🇻'},
-            'FRA':{nombre:'Francia',flag:'🇫🇷'},'NOR':{nombre:'Noruega',flag:'🇳🇴'},'SEN':{nombre:'Senegal',flag:'🇸🇳'},'IRQ':{nombre:'Irak',flag:'🇮🇶'},
-            'ARG':{nombre:'Argentina',flag:'🇦🇷'},'AUT':{nombre:'Austria',flag:'🇦🇹'},'ALG':{nombre:'Argelia',flag:'🇩🇿'},'JOR':{nombre:'Jordania',flag:'🇯🇴'},
-            'POR':{nombre:'Portugal',flag:'🇵🇹'},'COL':{nombre:'Colombia',flag:'🇨🇴'},'UZB':{nombre:'Uzbekistán',flag:'🇺🇿'},'COD':{nombre:'RD Congo',flag:'🇨🇩'},
-            'ENG':{nombre:'Inglaterra',flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿'},'CRO':{nombre:'Croacia',flag:'🇭🇷'},'GHA':{nombre:'Ghana',flag:'🇬🇭'},'PAN':{nombre:'Panamá',flag:'🇵🇦'}
-        };
-        
-        const GRUPOS = {
-            'A':['MEX','KOR','CZE','RSA'],'B':['CAN','SUI','BIH','QAT'],'C':['BRA','MAR','SCO','HAI'],
-            'D':['USA','AUS','TUR','PAR'],'E':['GER','CIV','ECU','CUW'],'F':['NED','JPN','SWE','TUN'],
-            'G':['BEL','IRN','EGY','NZL'],'H':['ESP','URU','KSA','CPV'],'I':['FRA','NOR','SEN','IRQ'],
-            'J':['ARG','AUT','ALG','JOR'],'K':['POR','COL','UZB','COD'],'L':['ENG','CRO','GHA','PAN']
-        };
-        
-        const PARTIDOS = [
-            {dia:'Jue 11 jun',grupo:'A',local:'MEX',visitante:'RSA',hora:'21:00',estadio:'Estadio Azteca, Ciudad de México',tv:'DAZN',destacadoRTVE:true,tipo:'Inaugural'},
-            {dia:'Vie 12 jun',grupo:'A',local:'KOR',visitante:'CZE',hora:'04:00',estadio:'Estadio Akron, Guadalajara',tv:'DAZN',destacadoRTVE:false},
-            {dia:'Vie 12 jun',grupo:'B',local:'CAN',visitante:'BIH',hora:'21:00',estadio:'BMO Field, Toronto',tv:'DAZN',destacadoRTVE:false},
-            {dia:'Sáb 13 jun',grupo:'B',local:'SUI',visitante:'QAT',hora:'21:00',estadio:"Levi's Stadium, San Francisco",tv:'DAZN',destacadoRTVE:false},
-            {dia:'Sáb 13 jun',grupo:'D',local:'USA',visitante:'PAR',hora:'03:00',estadio:'SoFi Stadium, Los Ángeles',tv:'DAZN',destacadoRTVE:false},
-            {dia:'Dom 14 jun',grupo:'C',local:'BRA',visitante:'MAR',hora:'00:00',estadio:'MetLife Stadium, Nueva Jersey',tv:'DAZN',destacadoRTVE:true,tipo:'Destacado'},
-            {dia:'Lun 15 jun',grupo:'H',local:'ESP',visitante:'CPV',hora:'18:00',estadio:'Mercedes-Benz Stadium, Atlanta',tv:'La 1 · DAZN',destacadoRTVE:true,tipo:'España'},
-            {dia:'Mar 16 jun',grupo:'I',local:'FRA',visitante:'SEN',hora:'21:00',estadio:'MetLife Stadium, Nueva Jersey',tv:'DAZN',destacadoRTVE:false},
-            {dia:'Mié 17 jun',grupo:'J',local:'ARG',visitante:'ALG',hora:'03:00',estadio:'Arrowhead Stadium, Kansas City',tv:'DAZN',destacadoRTVE:false},
-            {dia:'Mié 17 jun',grupo:'K',local:'POR',visitante:'COD',hora:'19:00',estadio:'NRG Stadium, Houston',tv:'DAZN',destacadoRTVE:false},
-            {dia:'Mié 17 jun',grupo:'L',local:'ENG',visitante:'CRO',hora:'22:00',estadio:'AT&T Stadium, Dallas',tv:'DAZN',destacadoRTVE:false},
-            {dia:'Dom 21 jun',grupo:'H',local:'ESP',visitante:'KSA',hora:'18:00',estadio:'Mercedes-Benz Stadium, Atlanta',tv:'La 1 · DAZN',destacadoRTVE:true,tipo:'España'},
-            {dia:'Sáb 27 jun',grupo:'H',local:'URU',visitante:'ESP',hora:'02:00',estadio:'Estadio Akron, Guadalajara',tv:'La 1 · DAZN',destacadoRTVE:true,tipo:'España'}
-        ];
-        
-        // PLANTILLAS DE JUGADORES
-        const PLANTILLAS = {
-            'ESP':{nombre:'España',flag:'🇪🇸',dt:'Luis de la Fuente',jugadores:[
-                {num:1,nombre:'Unai Simón',pos:'Portero',edad:29,club:'Athletic Club'},
-                {num:2,nombre:'Dani Carvajal',pos:'Defensa',edad:34,club:'Real Madrid'},
-                {num:3,nombre:'Aymeric Laporte',pos:'Defensa',edad:32,club:'Al Nassr'},
-                {num:4,nombre:'Pau Cubarsí',pos:'Defensa',edad:19,club:'FC Barcelona'},
-                {num:5,nombre:'Rodri',pos:'Centrocampista',edad:28,club:'Manchester City'},
-                {num:6,nombre:'Mikel Merino',pos:'Centrocampista',edad:28,club:'Arsenal'},
-                {num:7,nombre:'Álvaro Morata',pos:'Delantero',edad:33,club:'AC Milan'},
-                {num:8,nombre:'Fabián Ruiz',pos:'Centrocampista',edad:28,club:'PSG'},
-                {num:9,nombre:'Gavi',pos:'Centrocampista',edad:20,club:'FC Barcelona'},
-                {num:10,nombre:'Dani Olmo',pos:'Centrocampista',edad:26,club:'FC Barcelona'},
-                {num:11,nombre:'Ferran Torres',pos:'Delantero',edad:25,club:'FC Barcelona'},
-                {num:12,nombre:'Nico Williams',pos:'Delantero',edad:21,club:'Athletic Club'},
-                {num:13,nombre:'David Raya',pos:'Portero',edad:29,club:'Arsenal'},
-                {num:14,nombre:'Alejandro Grimaldo',pos:'Defensa',edad:29,club:'Bayer Leverkusen'},
-                {num:15,nombre:'Pedri',pos:'Centrocampista',edad:22,club:'FC Barcelona'},
-                {num:16,nombre:'Lamine Yamal',pos:'Delantero',edad:17,club:'FC Barcelona'},
-                {num:17,nombre:'Marc Cucurella',pos:'Defensa',edad:25,club:'Chelsea'},
-                {num:18,nombre:'Martín Zubimendi',pos:'Centrocampista',edad:25,club:'Real Sociedad'},
-                {num:19,nombre:'Mikel Oyarzabal',pos:'Delantero',edad:27,club:'Real Sociedad'},
-                {num:20,nombre:'Robin Le Normand',pos:'Defensa',edad:28,club:'Atlético Madrid'}
-            ]},
-            'ARG':{nombre:'Argentina',flag:'🇦🇷',dt:'Lionel Scaloni',jugadores:[
-                {num:1,nombre:'Emiliano Martínez',pos:'Portero',edad:32,club:'Aston Villa'},
-                {num:2,nombre:'Cristian Romero',pos:'Defensa',edad:26,club:'Tottenham'},
-                {num:3,nombre:'Nicolás Tagliafico',pos:'Defensa',edad:31,club:'Lyon'},
-                {num:4,nombre:'Nahuel Molina',pos:'Defensa',edad:26,club:'Atlético Madrid'},
-                {num:5,nombre:'Leandro Paredes',pos:'Centrocampista',edad:30,club:'Roma'},
-                {num:6,nombre:'Rodrigo De Paul',pos:'Centrocampista',edad:30,club:'Atlético Madrid'},
-                {num:7,nombre:'Alexis Mac Allister',pos:'Centrocampista',edad:25,club:'Liverpool'},
-                {num:8,nombre:'Julián Álvarez',pos:'Delantero',edad:24,club:'Atlético Madrid'},
-                {num:9,nombre:'Lionel Messi',pos:'Delantero',edad:37,club:'Inter Miami'},
-                {num:10,nombre:'Ángel Di María',pos:'Delantero',edad:36,club:'Benfica'},
-                {num:11,nombre:'Enzo Fernández',pos:'Centrocampista',edad:23,club:'Chelsea'},
-                {num:12,nombre:'Alejandro Garnacho',pos:'Delantero',edad:20,club:'Man United'}
-            ]},
-            'BRA':{nombre:'Brasil',flag:'🇧🇷',dt:'Carlo Ancelotti',jugadores:[
-                {num:1,nombre:'Alisson Becker',pos:'Portero',edad:32,club:'Liverpool'},
-                {num:2,nombre:'Danilo',pos:'Defensa',edad:33,club:'Juventus'},
-                {num:3,nombre:'Marquinhos',pos:'Defensa',edad:30,club:'PSG'},
-                {num:4,nombre:'Gabriel Magalhães',pos:'Defensa',edad:26,club:'Arsenal'},
-                {num:5,nombre:'Casemiro',pos:'Centrocampista',edad:32,club:'Man United'},
-                {num:6,nombre:'Alex Sandro',pos:'Defensa',edad:33,club:'Juventus'},
-                {num:7,nombre:'Vinícius Jr',pos:'Delantero',edad:23,club:'Real Madrid'},
-                {num:8,nombre:'Bruno Guimarães',pos:'Centrocampista',edad:26,club:'Newcastle'},
-                {num:9,nombre:'Richarlison',pos:'Delantero',edad:27,club:'Tottenham'},
-                {num:10,nombre:'Neymar Jr',pos:'Delantero',edad:32,club:'Al Hilal'},
-                {num:11,nombre:'Raphinha',pos:'Delantero',edad:27,club:'Barcelona'},
-                {num:12,nombre:'Ederson',pos:'Portero',edad:30,club:'Man City'}
-            ]},
-            'FRA':{nombre:'Francia',flag:'🇫🇷',dt:'Didier Deschamps',jugadores:[
-                {num:1,nombre:'Mike Maignan',pos:'Portero',edad:29,club:'AC Milan'},
-                {num:2,nombre:'Jules Koundé',pos:'Defensa',edad:25,club:'Barcelona'},
-                {num:3,nombre:'Dayot Upamecano',pos:'Defensa',edad:25,club:'Bayern'},
-                {num:4,nombre:'Ibrahima Konaté',pos:'Defensa',edad:25,club:'Liverpool'},
-                {num:5,nombre:'Aurélien Tchouaméni',pos:'Centrocampista',edad:24,club:'Real Madrid'},
-                {num:6,nombre:'Eduardo Camavinga',pos:'Centrocampista',edad:21,club:'Real Madrid'},
-                {num:7,nombre:'Antoine Griezmann',pos:'Delantero',edad:33,club:'Atlético Madrid'},
-                {num:8,nombre:'Kylian Mbappé',pos:'Delantero',edad:25,club:'Real Madrid'},
-                {num:9,nombre:'Olivier Giroud',pos:'Delantero',edad:37,club:'LAFC'},
-                {num:10,nombre:'Ousmane Dembélé',pos:'Delantero',edad:27,club:'PSG'}
-            ]},
-            'GER':{nombre:'Alemania',flag:'🇩🇪',dt:'Julian Nagelsmann',jugadores:[
-                {num:1,nombre:'Manuel Neuer',pos:'Portero',edad:38,club:'Bayern'},
-                {num:2,nombre:'Antonio Rüdiger',pos:'Defensa',edad:31,club:'Real Madrid'},
-                {num:3,nombre:'Joshua Kimmich',pos:'Centrocampista',edad:29,club:'Bayern'},
-                {num:4,nombre:'Jamal Musiala',pos:'Centrocampista',edad:21,club:'Bayern'},
-                {num:5,nombre:'Kai Havertz',pos:'Delantero',edad:25,club:'Arsenal'},
-                {num:6,nombre:'Ilkay Gündogan',pos:'Centrocampista',edad:33,club:'Barcelona'},
-                {num:7,nombre:'Leroy Sané',pos:'Delantero',edad:28,club:'Bayern'},
-                {num:8,nombre:'Niclas Füllkrug',pos:'Delantero',edad:31,club:'Dortmund'}
-            ]}
-        };
-        
-        const GOLEADORES = [
-            {pos:1,nombre:'Erling Haaland',pais:'Noruega',goles:12,flag:'🇳🇴'},{pos:2,nombre:'Romelu Lukaku',pais:'Bélgica',goles:10,flag:'🇧🇪'},
-            {pos:3,nombre:'Cristiano Ronaldo',pais:'Portugal',goles:9,flag:'🇵🇹'},{pos:4,nombre:'Harry Kane',pais:'Inglaterra',goles:8,flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿'},
-            {pos:5,nombre:'Kylian Mbappé',pais:'Francia',goles:8,flag:'🇫🇷'},{pos:6,nombre:'Lionel Messi',pais:'Argentina',goles:7,flag:'🇦🇷'},
-            {pos:7,nombre:'Robert Lewandowski',pais:'Polonia',goles:7,flag:'🇵🇱'},{pos:8,nombre:'Vinícius Jr',pais:'Brasil',goles:6,flag:'🇧🇷'},
-            {pos:9,nombre:'Olivier Giroud',pais:'Francia',goles:6,flag:'🇫🇷'},{pos:10,nombre:'Alexander Isak',pais:'Suecia',goles:6,flag:'🇸🇪'}
-        ];
-        
-        const SEDES = [
-            {pais:'🇲🇽',ciudad:'Ciudad de México',estadio:'Estadio Azteca',partidos:5,capacidad:'87,523'},
-            {pais:'🇲🇽',ciudad:'Guadalajara',estadio:'Estadio Akron',partidos:4,capacidad:'46,232'},
-            {pais:'🇨🇦',ciudad:'Toronto',estadio:'BMO Field',partidos:4,capacidad:'30,000'},
-            {pais:'🇨🇦',ciudad:'Vancouver',estadio:'BC Place',partidos:4,capacidad:'54,500'},
-            {pais:'🇺🇸',ciudad:'Nueva York/NJ',estadio:'MetLife Stadium',partidos:8,capacidad:'82,500'},
-            {pais:'🇺🇸',ciudad:'Los Ángeles',estadio:'SoFi Stadium',partidos:8,capacidad:'70,240'},
-            {pais:'🇺🇸',ciudad:'Dallas',estadio:'AT&T Stadium',partidos:8,capacidad:'80,000'},
-            {pais:'🇺🇸',ciudad:'Miami',estadio:'Hard Rock Stadium',partidos:7,capacidad:'65,326'},
-            {pais:'🇺🇸',ciudad:'Atlanta',estadio:'Mercedes-Benz Stadium',partidos:7,capacidad:'71,000'},
-            {pais:'🇺🇸',ciudad:'Houston',estadio:'NRG Stadium',partidos:7,capacidad:'72,220'}
-        ];
-        
-        const NOTICIAS = [
-            {emoji:'🏆',tag:'Mundial 2026',titulo:'El Mundial FIFA 2026 arranca el 11 de junio con México vs Sudáfrica en el Estadio Azteca',tiempo:'Actual'},
-            {emoji:'🇪🇸',tag:'España',titulo:'Luis de la Fuente convoca a los 26 jugadores con Lamine Yamal, Pedri y Nico Williams',tiempo:'Reciente'},
-            {emoji:'🇦🇷',tag:'Argentina',titulo:'Argentina defenderá el título en el Grupo J ante Argelia, Austria y Jordania',tiempo:'Reciente'},
-            {emoji:'🏟️',tag:'Sedes',titulo:'Las 16 sedes del Mundial 2026 están listas: MetLife, SoFi, Azteca y más',tiempo:'Reciente'},
-            {emoji:'📺',tag:'TV',titulo:'RTVE emitirá todos los partidos de España y las semifinales y final en abierto',tiempo:'Reciente'}
-        ];
-        
-        // ========== FUNCIONES DEL MUNDIAL ==========
-        function buildGrupos() {
-            const container = document.getElementById('gruposContainer');
-            let html = '';
-            for (const [letra, equipos] of Object.entries(GRUPOS)) {
-                html += `<div class="gc"><div class="gh"><h3>GRUPO ${letra}</h3><span>${EQUIPOS[equipos[0]].nombre} · ${EQUIPOS[equipos[1]].nombre}...</span></div><div class="gsh"><span></span><span>PJ</span><span>G</span><span>E</span><span>P</span><span>Pts</span></div>`;
-                equipos.forEach((eq, idx) => { const claseColor = idx < 2 ? 'dg' : (idx === 2 ? 'db' : 'dm'); html += `<div class="tr"><div class="ti"><div class="qd ${claseColor}"></div><span style="font-size:16px">${EQUIPOS[eq].flag}</span><span style="font-size:13px;font-weight:500">${EQUIPOS[eq].nombre}</span></div><span class="ts">0</span><span class="ts">0</span><span class="ts">0</span><span class="ts">0</span><span class="tp">0</span></div>`; });
-                html += `</div>`;
-            }
-            container.innerHTML = html;
-        }
-        
-        function buildPartidos() {
-            const container = document.getElementById('partidosContainer');
-            const porDia = {};
-            PARTIDOS.forEach(p => { if (!porDia[p.dia]) porDia[p.dia] = []; porDia[p.dia].push(p); });
-            let html = '';
-            for (const [dia, partidos] of Object.entries(porDia)) {
-                html += `<div class="dl">${dia}</div>`;
-                partidos.forEach(p => { let badgeTV = `<span class="bd btv">${p.tv}</span>`; if (p.tipo === 'España') { badgeTV = `<span class="bd rtve-badge">🇪🇸 RTVE · La 1</span>`; } else if (p.tipo === 'Inaugural') { badgeTV = `<span class="bd rtve-badge">🏆 Inaugural RTVE</span>`; } else if (p.tipo === 'Destacado') { badgeTV = `<span class="bd rtve-badge">📺 Destacado RTVE</span>`; }
-                html += `<div class="mc"><div class="mt2">${p.hora}</div><div class="mts"><div class="mtm"><span style="font-size:16px">${EQUIPOS[p.local].flag}</span><span class="mtn">${EQUIPOS[p.local].nombre}</span></div><div class="msep"></div><div class="mtm"><span style="font-size:16px">${EQUIPOS[p.visitante].flag}</span><span class="mtn">${EQUIPOS[p.visitante].nombre}</span></div></div><div class="mm"><span class="bd bg2">Grupo ${p.grupo}</span><span class="mv" style="font-size:9px;display:block;margin-top:3px">${p.estadio}</span>${badgeTV}</div></div>`; });
-            }
-            container.innerHTML = html;
-        }
-        
-        function buildClasificacion(grupo = 'A') {
-            const equipos = GRUPOS[grupo];
-            let html = `<table class="stb"><thead><tr><th>Equipo</th><th>PJ</th><th>G</th><th>E</th><th>P</th><th>GF</th><th>GC</th><th>DG</th><th>Pts</th></tr></thead><tbody>`;
-            equipos.forEach(eq => { html += `<tr><td style="text-align:left"><span style="font-size:16px;margin-right:8px">${EQUIPOS[eq].flag}</span>${EQUIPOS[eq].nombre}</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td><strong>0</strong></td>`; });
-            html += `</tbody></table>`; document.getElementById('clasificacionContainer').innerHTML = html;
-        }
-        
-        function buildTabsClasificacion() { const container = document.getElementById('gruposTabs'); let html = ''; for (const letra of Object.keys(GRUPOS)) { html += `<button class="st ${letra === 'A' ? 'active' : ''}" onclick="cambiarGrupoClasificacion('${letra}', this)">Grupo ${letra}</button>`; } container.innerHTML = html; }
-        window.cambiarGrupoClasificacion = function(grupo, btn) { document.querySelectorAll('#gruposTabs .st').forEach(b => b.classList.remove('active')); btn.classList.add('active'); buildClasificacion(grupo); };
-        
-        function buildGoleadores() { let html = `<table class="scorers-table"><thead><tr><th>#</th><th>Jugador</th><th>País</th><th>Goles</th></tr></thead><tbody>`; GOLEADORES.forEach(g => { html += `<tr><td style="font-weight:700;color:var(--gold)">${g.pos}</td><td style="font-weight:600">${g.nombre}</td><td>${g.flag} ${g.pais}</td><td style="font-size:18px;font-weight:700;color:var(--navy)">${g.goles}</td>`; }); html += `</tbody></table>`; document.getElementById('goleadoresContainer').innerHTML = html; }
-        
-        function buildCruces() {
-            const rondas = [{nombre:'Dieciseisavos',partidos:16,tv:'DAZN'},{nombre:'Octavos',partidos:8,tv:'DAZN'},{nombre:'Cuartos',partidos:4,tv:'DAZN'},{nombre:'Semifinales',partidos:2,tv:'RTVE · La 1'},{nombre:'Final',partidos:1,tv:'RTVE · La 1'},{nombre:'3er Puesto',partidos:1,tv:'RTVE · Teledeporte'}];
-            let html = `<div class="bk">`;
-            rondas.forEach(r => { html += `<div class="rc"><div class="rt">${r.nombre}<br><span style="font-size:8px">${r.tv}</span></div>`; for (let i = 0; i < r.partidos; i++) { html += `<div class="bm"><div class="bt2"><span>🏳️</span><span class="tbd">Por determinar</span></div><div class="bt2"><span>🏳️</span><span class="tbd">Por determinar</span></div></div>`; } html += `</div>`; });
-            html += `</div>`; document.getElementById('crucesContainer').innerHTML = html;
-        }
-        
-        function buildResultados() { document.getElementById('resultadosContainer').innerHTML = `<div class="info-badge" style="background:#fff3e0">🏆 Partido Inaugural: <strong>México vs Sudáfrica</strong> — 11 de junio de 2026 — 21:00h — Estadio Azteca</div><div class="mc hl"><div class="mt2">21:00</div><div class="mts"><div class="mtm"><span style="font-size:18px">🇲🇽</span><span class="mtn">México</span></div><div class="msep"></div><div class="mtm"><span style="font-size:18px">🇿🇦</span><span class="mtn">Sudáfrica</span></div></div><div class="mm"><span class="bd bg2">Inaugural · Grupo A</span><span class="mv">Estadio Azteca · 11 jun 2026</span></div></div><div class="info-badge" style="margin-top:12px">📡 Los resultados en vivo se actualizarán durante el Mundial 2026.</div>`; }
-        
-        function buildTV() { document.getElementById('tvContainer').innerHTML = `<div class="info-badge">📺 <strong>RTVE (La 1 · Teledeporte · RTVE Play)</strong> — En abierto y gratuito</div>
-            <div class="gc" style="margin-bottom:15px"><div class="gh"><h3>🇪🇸 PARTIDOS DE ESPAÑA EN RTVE</h3><span>Fase de Grupos</span></div>
-            <div class="mc"><div class="mt2">18:00</div><div class="mts"><div class="mtm"><span style="font-size:16px">🇪🇸</span><span class="mtn">España vs Cabo Verde</span></div></div><div class="mm"><span class="bd rtve-badge">La 1 · 15 junio</span></div></div>
-            <div class="mc"><div class="mt2">18:00</div><div class="mts"><div class="mtm"><span style="font-size:16px">🇪🇸</span><span class="mtn">España vs Arabia Saudí</span></div></div><div class="mm"><span class="bd rtve-badge">La 1 · 21 junio</span></div></div>
-            <div class="mc"><div class="mt2">02:00</div><div class="mts"><div class="mtm"><span style="font-size:16px">🇺🇾</span><span class="mtn">Uruguay vs España</span></div></div><div class="mm"><span class="bd rtve-badge">La 1 · 27 junio</span></div></div></div>
-            <div class="gc"><div class="gh"><h3>🏆 ELIMINATORIAS EN RTVE</h3><span>En abierto</span></div>
-            <div class="mc"><div class="mt2">-</div><div class="mts"><div class="mtm"><span class="mtn">Semifinales (2 partidos)</span></div></div><div class="mm"><span class="bd rtve-badge">La 1</span></div></div>
-            <div class="mc"><div class="mt2">-</div><div class="mts"><div class="mtm"><span class="mtn">Final (19 julio)</span></div></div><div class="mm"><span class="bd rtve-badge">La 1</span></div></div>
-            <div class="mc"><div class="mt2">-</div><div class="mts"><div class="mtm"><span class="mtn">Partido 3er/4to puesto</span></div></div><div class="mm"><span class="bd rtve-badge">Teledeporte</span></div></div></div>
-            <div class="info-badge" style="margin-top:12px">📡 Dieciseisavos, Octavos y Cuartos de final solo en <strong>DAZN</strong> (suscripción).</div>`; }
-        
-        function buildSedes() { let html = ''; SEDES.forEach(s => { html += `<div class="sdc"><div class="sdf">${s.pais}</div><div class="sdci">${s.ciudad}</div><div class="sdst">${s.estadio}</div><div class="sdm"><span class="sdt2">⚽ ${s.partidos} partidos</span><span class="sdt2">👥 ${s.capacidad}</span></div></div>`; }); document.getElementById('sedesContainer').innerHTML = html; }
-        
-        function buildNoticias() { let html = '<div class="ng">'; NOTICIAS.forEach(n => { html += `<div class="nc"><div class="ni">${n.emoji}</div><div><div class="ntg">${n.tag}</div><div class="nti">${n.titulo}</div><div class="ndt">${n.tiempo}</div></div></div>`; }); html += '</div>'; document.getElementById('noticiasContainer').innerHTML = html; }
-        
-        function buildSelectorEquipos() {
-            const select = document.getElementById('teamSelect');
-            select.innerHTML = '<option value="">Selecciona un equipo</option>';
-            for (const [code, eq] of Object.entries(EQUIPOS)) { if (PLANTILLAS[code]) { const option = document.createElement('option'); option.value = code; option.textContent = `${eq.flag} ${eq.nombre}`; select.appendChild(option); } }
-        }
-        
-        window.cambiarEquipo = function(code) {
-            const plantilla = PLANTILLAS[code];
-            if (!plantilla) return;
-            const container = document.getElementById('plantillaContainer');
-            document.getElementById('jugadorInfo').innerHTML = `<div class="info-badge">📋 Seleccionador: <strong>${plantilla.dt}</strong> | Lista oficial FIFA</div>`;
-            let html = `<div class="squad-grid">`;
-            plantilla.jugadores.forEach(j => { html += `<div class="player-card" onclick="abrirModal('${code}', ${j.num})"><div class="pc-name">${j.nombre}</div><div class="pc-club">${j.club}</div><div><span class="pc-stat">${j.pos}</span><span class="pc-stat">${j.edad} años</span><span class="pc-stat">#${j.num}</span></div></div>`; });
-            html += `</div>`; container.innerHTML = html;
-        };
-        
-        window.abrirModal = function(code, num) {
-            const plantilla = PLANTILLAS[code]; const jugador = plantilla.jugadores.find(j => j.num === num); if (!jugador) return;
-            document.getElementById('modalFlag').textContent = plantilla.flag; document.getElementById('modalName').textContent = jugador.nombre;
-            document.getElementById('modalTeam').textContent = `${plantilla.nombre} · ${jugador.pos}`;
-            document.getElementById('modalBody').innerHTML = `<div class="modal-row"><div class="modal-icon">🔢</div><div><div class="modal-label">Dorsal</div><div class="modal-value">#${jugador.num}</div></div></div>
-                <div class="modal-row"><div class="modal-icon">🎂</div><div><div class="modal-label">Edad</div><div class="modal-value">${jugador.edad} años</div></div></div>
-                <div class="modal-row"><div class="modal-icon">🏟️</div><div><div class="modal-label">Club</div><div class="modal-value">${jugador.club}</div></div></div>
-                <div class="modal-row"><div class="modal-icon">👔</div><div><div class="modal-label">Seleccionador</div><div class="modal-value">${plantilla.dt}</div></div></div>`;
-            document.getElementById('playerModal').classList.add('open'); document.body.style.overflow = 'hidden';
-        };
-        window.cerrarModal = function() { document.getElementById('playerModal').classList.remove('open'); document.body.style.overflow = ''; };
-        window.showSection = function(id) { document.querySelectorAll('.sec').forEach(s => s.classList.remove('active')); document.querySelectorAll('.nb').forEach(b => b.classList.remove('active')); document.getElementById('sec-' + id).classList.add('active'); event.target.classList.add('active'); };
-        
-        function iniciarMundial() { buildGrupos(); buildPartidos(); buildTabsClasificacion(); buildClasificacion('A'); buildGoleadores(); buildCruces(); buildResultados(); buildTV(); buildSedes(); buildNoticias(); buildSelectorEquipos(); }
-    </script>
-    
-    <style>
-        *{margin:0;padding:0;box-sizing:border-box}
-        :root{--navy:#0a1f4e;--navy2:#132a66;--gold:#c8a020;--bg:#f2f4f8;--card:#fff;--bdr:#e0e4ee;--txt:#111827;--mut:#6b7280}
-        body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--txt)}
-        .app{max-width:1000px;margin:0 auto;padding-bottom:50px}
-        .hdr{background:linear-gradient(135deg,#07163a 0%,#0d2460 55%,#0a1f4e 100%);padding:20px}
-        .hi{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:15px}
-        .hl{display:flex;align-items:center;gap:15px}
-        .logo{width:55px;height:55px;background:rgba(255,255,255,0.1);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:bold;color:var(--gold)}
-        .htx h1{color:white;font-size:22px;font-weight:700}
-        .htx p{color:rgba(255,255,255,0.6);font-size:12px}
-        .hr2{text-align:right}
-        .hr2 .hd{font-size:11px;color:rgba(255,255,255,0.5)}
-        .hr2 .hb{font-size:13px;color:var(--gold);font-weight:600}
-        .gline{height:3px;background:linear-gradient(90deg,transparent,var(--gold)20%,#f0d06050%,var(--gold)80%,transparent)}
-        .nav{display:flex;background:white;border-bottom:1px solid var(--bdr);position:sticky;top:0;z-index:100;overflow-x:auto}
-        .nb{flex:none;padding:12px 16px;font-size:13px;font-weight:600;color:var(--mut);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer}
-        .nb.active{color:var(--navy);border-bottom-color:var(--gold)}
-        .sec{display:none;padding:20px 15px}
-        .sec.active{display:block}
-        .stitle{font-size:22px;font-weight:700;color:var(--navy);margin-bottom:15px}
-        .gg{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:15px}
-        .gc{background:var(--card);border:1px solid var(--bdr);border-radius:12px;overflow:hidden}
-        .gh{background:var(--navy);color:white;padding:10px 15px;display:flex;justify-content:space-between}
-        .gsh{display:grid;grid-template-columns:1fr 40px 40px 40px 40px 45px;padding:8px 12px;background:#f8f9fc;border-bottom:1px solid var(--bdr);font-size:10px;font-weight:700;color:var(--mut);text-align:center}
-        .tr{display:grid;grid-template-columns:1fr 40px 40px 40px 40px 45px;padding:8px 12px;border-bottom:1px solid var(--bdr);align-items:center}
-        .ti{display:flex;align-items:center;gap:8px}
-        .qd{width:8px;height:8px;border-radius:50%}
-        .dg{background:#388e3c}.db{background:#1565c0}.dm{background:#9e9e9e}
-        .mc{background:var(--card);border:1px solid var(--bdr);border-radius:10px;padding:12px;margin-bottom:8px;display:flex;align-items:center;gap:12px}
-        .mt2{font-size:12px;color:var(--mut);min-width:45px}
-        .mts{flex:1}
-        .mtm{display:flex;align-items:center;gap:8px;padding:2px 0}
-        .msep{height:1px;background:var(--bdr);margin:3px 0}
-        .mtn{font-size:13px;font-weight:500;flex:1}
-        .mm{text-align:right}
-        .bd{font-size:9px;font-weight:700;padding:3px 8px;border-radius:4px}
-        .bg2{background:#e3f2fd;color:#0d47a1}
-        .btv{background:#e8f5e9;color:#1b5e20}
-        .rtve-badge{background:#e63946;color:white}
-        .dl{font-size:11px;font-weight:700;color:var(--mut);margin:15px 0 8px;padding-bottom:5px;border-bottom:1px solid var(--bdr)}
-        .stb{width:100%;border-collapse:collapse;background:var(--card);border-radius:10px;overflow:hidden}
-        .stb th{background:var(--navy);color:white;padding:10px;font-size:11px}
-        .stb td{padding:10px;font-size:13px;border-bottom:1px solid var(--bdr)}
-        .scorers-table{width:100%;border-collapse:collapse;background:var(--card);border-radius:10px}
-        .scorers-table th{background:var(--navy);color:white;padding:12px}
-        .scorers-table td{padding:10px;border-bottom:1px solid var(--bdr)}
-        .bk{display:flex;gap:15px;overflow-x:auto}
-        .rc{min-width:120px}
-        .rt{font-size:11px;font-weight:700;text-align:center;padding:8px;background:var(--navy);color:white;border-radius:8px;margin-bottom:10px}
-        .bm{background:var(--card);border:1px solid var(--bdr);border-radius:8px;margin-bottom:8px;padding:8px}
-        .bt2{display:flex;align-items:center;gap:6px;font-size:11px}
-        .tbd{color:var(--mut);font-style:italic}
-        .sdg{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
-        .sdc{background:var(--card);border:1px solid var(--bdr);border-radius:10px;padding:12px}
-        .sdf{font-size:28px}
-        .sdci{font-size:14px;font-weight:700;color:var(--navy)}
-        .sdst{font-size:11px;color:var(--mut)}
-        .sdt2{display:inline-block;font-size:10px;background:#f0f2f8;padding:2px 8px;border-radius:4px;margin-top:6px;margin-right:5px}
-        .stt{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:15px}
-        .st{padding:6px 14px;border:1px solid var(--bdr);border-radius:20px;font-size:12px;background:var(--card);cursor:pointer}
-        .st.active{background:var(--navy);color:white}
-        .info-badge{background:#e8f0fe;border-left:3px solid var(--gold);padding:10px 15px;font-size:12px;color:var(--navy);margin-bottom:15px;border-radius:8px}
-        .ng{display:grid;gap:10px}
-        .nc{background:var(--card);border:1px solid var(--bdr);border-radius:10px;padding:12px;display:flex;gap:12px;cursor:pointer}
-        .ni{width:42px;height:42px;border-radius:8px;background:#f8f9fc;display:flex;align-items:center;justify-content:center;font-size:22px}
-        .ntg{font-size:9px;font-weight:700;color:var(--gold)}
-        .nti{font-size:13px;font-weight:500;margin:3px 0}
-        .ndt{font-size:10px;color:var(--mut)}
-        .team-selector{width:100%;padding:12px;margin-bottom:20px;border-radius:10px;border:1px solid var(--bdr);font-size:14px;background:var(--card);font-weight:500}
-        .squad-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:10px}
-        .player-card{background:var(--card);border:1px solid var(--bdr);border-radius:10px;padding:12px;cursor:pointer}
-        .player-card:hover{border-color:var(--gold)}
-        .pc-name{font-size:15px;font-weight:700;color:var(--navy)}
-        .pc-club{font-size:11px;color:var(--mut);margin-top:4px}
-        .pc-stat{display:inline-block;font-size:10px;background:#f0f2f8;padding:3px 8px;border-radius:4px;margin-top:6px;margin-right:5px}
-        .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;padding:20px}
-        .modal-overlay.open{display:flex}
-        .modal-box{background:white;border-radius:16px;width:100%;max-width:380px;overflow:hidden}
-        .modal-head{background:linear-gradient(135deg,var(--navy),var(--navy2));padding:20px;color:white;position:relative}
-        .modal-close{position:absolute;top:12px;right:12px;background:rgba(255,255,255,0.2);border:none;color:white;width:30px;height:30px;border-radius:50%;font-size:18px;cursor:pointer}
-        .modal-flag{font-size:32px}.modal-name{font-size:22px;font-weight:700;margin-top:5px}.modal-team{font-size:13px;opacity:0.8}
-        .modal-body{padding:20px}
-        .modal-row{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--bdr)}
-        .modal-icon{width:32px;font-size:18px}.modal-label{font-size:10px;color:var(--mut)}.modal-value{font-size:14px;font-weight:600;color:var(--navy)}
-        #loginScreen{position:fixed;top:0;left:0;width:100%;height:100%;background:linear-gradient(135deg,#07163a,#0d2460);display:flex;align-items:center;justify-content:center;z-index:2000}
-        .login-card{background:white;padding:40px;border-radius:20px;width:90%;max-width:380px;text-align:center}
-        .login-card .logo{font-size:64px;margin-bottom:10px}
-        .login-card h1{color:#0a1f4e;font-size:24px}
-        .login-card p{color:#666;margin-bottom:25px}
-        .login-card input{width:100%;padding:12px;margin:8px 0;border:1px solid #ddd;border-radius:10px;font-size:16px}
-        .login-card button{width:100%;padding:12px;background:#c8a020;color:white;border:none;border-radius:10px;font-size:16px;font-weight:bold;cursor:pointer}
-        .error-msg{color:#e74c3c;font-size:13px;margin-top:12px;display:none}
-        .logout-btn{position:fixed;bottom:20px;right:20px;background:#e74c3c;color:white;border:none;padding:10px 20px;border-radius:30px;cursor:pointer;z-index:1000}
-        .info-sesion{position:fixed;bottom:20px;left:20px;background:rgba(0,0,0,0.7);color:white;padding:5px 10px;border-radius:20px;font-size:10px;z-index:1000}
-        #appScreen{display:none}
-        @media (max-width:600px){.gsh,.tr{grid-template-columns:1fr 30px 30px 30px 30px 35px}.mc{flex-wrap:wrap}.mm{width:100%;text-align:left}}
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Copa Mundial FIFA 2026</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--navy:#0a1f4e;--navy2:#132a66;--gold:#c8a020;--gold2:#e8c040;--bg:#f2f4f8;--card:#fff;--bdr:#e0e4ee;--txt:#111827;--mut:#6b7280}
+body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--txt);min-height:100vh}
+.app{max-width:960px;margin:0 auto;padding-bottom:50px}
+.hdr{background:linear-gradient(135deg,#07163a 0%,#0d2460 55%,#0a1f4e 100%);padding:14px 18px 10px;position:relative;overflow:hidden}
+.hdr::before{content:'2026';font-family:'Barlow Condensed',sans-serif;font-size:130px;font-weight:900;color:rgba(255,255,255,.035);position:absolute;right:-5px;top:-22px;line-height:1;pointer-events:none}
+.hi{display:flex;align-items:center;justify-content:space-between;position:relative;z-index:1}
+.hl{display:flex;align-items:center;gap:12px}
+.logo-img{height:52px;width:auto;object-fit:contain}
+.htx h1{color:#fff;font-size:19px;font-weight:700;font-family:'Barlow Condensed',sans-serif;letter-spacing:1px;line-height:1.1}
+.htx p{color:rgba(255,255,255,.5);font-size:11px;margin-top:3px}
+.hr2{text-align:right}
+.hr2 .hd{font-size:11px;color:rgba(255,255,255,.5)}
+.hr2 .hb{font-size:12px;color:#e8c040;font-weight:600;margin-top:2px}
+.gline{height:3px;background:linear-gradient(90deg,transparent,#c8a020 20%,#f0d060 50%,#c8a020 80%,transparent)}
+.nav{display:flex;background:#fff;border-bottom:1px solid var(--bdr);position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.07);overflow-x:auto}
+.nav::-webkit-scrollbar{height:0}
+.nb{flex:none;padding:11px 13px;font-size:12px;font-weight:500;color:var(--mut);border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:all .15s}
+.nb.active{color:var(--navy);border-bottom-color:var(--gold)}
+.nb:hover:not(.active){color:var(--txt)}
+.sec{display:none;padding:18px 14px}
+.sec.active{display:block}
+.stitle{font-size:20px;font-weight:700;color:var(--navy);margin-bottom:12px;font-family:'Barlow Condensed',sans-serif;letter-spacing:.3px}
+.src-badge{display:inline-flex;align-items:center;gap:5px;font-size:10px;color:#388e3c;margin-bottom:13px;background:#e8f5e9;padding:4px 10px;border-radius:20px;border:1px solid #c8e6c9;font-weight:600}
+.ib{background:linear-gradient(135deg,var(--navy),var(--navy2));border-radius:10px;padding:13px 15px;margin-bottom:13px;color:#fff;display:flex;gap:11px;align-items:flex-start}
+.ib-i{font-size:21px;flex-shrink:0;margin-top:1px}
+.ib-t h3{font-size:13px;font-weight:700;font-family:'Barlow Condensed',sans-serif}
+.ib-t p{font-size:11px;color:rgba(255,255,255,.7);margin-top:3px;line-height:1.5}
+.cdr{display:flex;gap:9px;margin-top:9px}
+.cdb{background:rgba(255,255,255,.12);border-radius:7px;padding:7px 11px;text-align:center;min-width:50px}
+.cdn{font-size:21px;font-weight:700;font-family:'Barlow Condensed',sans-serif;color:#e8c040;line-height:1}
+.cdl{font-size:9px;color:rgba(255,255,255,.55);margin-top:1px}
+.gg{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+.gc{background:var(--card);border:1px solid var(--bdr);border-radius:10px;overflow:hidden}
+.gh{background:var(--navy);color:#fff;padding:8px 12px;display:flex;justify-content:space-between;align-items:center}
+.gh h3{font-size:13px;font-weight:700;font-family:'Barlow Condensed',sans-serif;letter-spacing:.5px}
+.gh span{font-size:9px;color:rgba(255,255,255,.5)}
+.gsh{display:grid;grid-template-columns:1fr 26px 26px 26px 26px 30px;padding:4px 10px;background:#f8f9fc;border-bottom:1px solid var(--bdr)}
+.gsh span{font-size:9px;font-weight:700;color:var(--mut);text-align:center}
+.gsh span:first-child{opacity:0}
+.tr{display:grid;grid-template-columns:1fr 26px 26px 26px 26px 30px;padding:7px 10px;border-bottom:1px solid var(--bdr);align-items:center;transition:background .1s}
+.tr:last-child{border-bottom:none}
+.tr:hover{background:#f8f9fc}
+.ti{display:flex;align-items:center;gap:7px}
+.qd{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.dg{background:#388e3c}.db{background:#1565c0}.dm{background:#bbb}
+.ts{font-size:11px;color:var(--mut);text-align:center}
+.tp{font-size:12px;font-weight:700;color:var(--navy);text-align:center}
+.gli{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--mut)}
+.gld{width:8px;height:8px;border-radius:50%}
+.fb{display:flex;gap:5px;margin-bottom:13px;overflow-x:auto;padding-bottom:2px;flex-wrap:wrap}
+.fb::-webkit-scrollbar{height:0}
+.fbt{flex:none;padding:5px 12px;border:1px solid var(--bdr);border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;background:var(--card);color:var(--mut);transition:all .15s}
+.fbt.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+.dg2{margin-bottom:17px}
+.dl{font-size:10px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:1px;padding:5px 0;border-bottom:1px solid var(--bdr);margin-bottom:7px}
+.mc{background:var(--card);border:1px solid var(--bdr);border-radius:9px;padding:9px 12px;margin-bottom:5px;display:flex;align-items:center;gap:10px;transition:border-color .15s}
+.mc:hover{border-color:#aab4d0}
+.mc.hl{border-left:3px solid var(--gold)}
+.mc.rtve{border-left:3px solid #1565c0}
+.mc.hl.rtve{border-left:3px solid var(--gold)}
+.mt2{font-size:11px;color:var(--mut);min-width:44px;font-family:'Barlow Condensed',sans-serif}
+.mts{flex:1}
+.mtm{display:flex;align-items:center;gap:7px;padding:1.5px 0}
+.msep{height:1px;background:var(--bdr);margin:3px 0}
+.mtn{font-size:12px;font-weight:500;flex:1}
+.mm{display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+.bd{font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;letter-spacing:.3px}
+.bg2{background:#e3f2fd;color:#0d47a1}
+.btv{background:#e8f5e9;color:#1b5e20}
+.btv-rtve{background:#1565c0;color:#fff}
+.mv{font-size:9px;color:var(--mut);max-width:120px;text-align:right;line-height:1.3}
+.stt{display:flex;gap:5px;margin-bottom:11px;flex-wrap:wrap}
+.st{padding:4px 11px;border:1px solid var(--bdr);border-radius:16px;font-size:11px;font-weight:500;cursor:pointer;background:var(--card);color:var(--mut);transition:all .15s}
+.st.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+.stable{width:100%;border-collapse:collapse}
+.stable th{font-size:9px;font-weight:700;color:var(--mut);padding:6px 7px;text-align:center;border-bottom:1px solid var(--bdr);background:#f8f9fc}
+.stable th:first-child{text-align:left;padding-left:10px}
+.stable td{padding:8px 7px;font-size:12px;text-align:center;border-bottom:1px solid var(--bdr)}
+.stable td:first-child{text-align:left;padding-left:10px}
+.stable tr:last-child td{border-bottom:none}
+.stable tr:hover td{background:#f8f9fc}
+.pp{width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700}
+.ppq{background:#e8f5e9;color:#2e7d32}.ppr{background:#e3f2fd;color:#1565c0}.ppe{background:#f3f4f6;color:#6b7280}
+.tc{display:flex;align-items:center;gap:7px}
+.tpt{font-weight:700;color:var(--navy)}
+/* JUGADORES */
+.tf2{flex:none;padding:5px 12px;border:1px solid var(--bdr);border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;background:var(--card);color:var(--mut);transition:all .15s;margin-bottom:5px}
+.tf2.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+.squad-section{margin-bottom:14px}
+.squad-pos{font-size:10px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:1px;padding:5px 0;border-bottom:1px solid var(--bdr);margin-bottom:7px}
+.squad-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.player-card{background:var(--card);border:1px solid var(--bdr);border-radius:8px;padding:8px 10px;transition:border-color .15s}
+.player-card:hover{border-color:#aab4d0}
+.pc-top{display:flex;align-items:center;gap:7px;margin-bottom:4px}
+.pc-num{font-size:16px;font-weight:700;font-family:'Barlow Condensed',sans-serif;color:var(--navy);min-width:22px;line-height:1}
+.pc-pos{font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;flex-shrink:0}
+.pos-gk{background:#fff3e0;color:#e65100}
+.pos-df{background:#e3f2fd;color:#0d47a1}
+.pos-mf{background:#e8f5e9;color:#1b5e20}
+.pos-fw{background:#fce4ec;color:#880e4f}
+.pc-name{font-size:12px;font-weight:600;line-height:1.2;flex:1}
+.pc-club{font-size:10px;color:var(--mut);margin-top:1px}
+.pc-dob{font-size:9px;color:var(--mut);margin-top:3px}
+/* BRACKET */
+.bw{overflow-x:auto;padding-bottom:6px}
+.bk{display:flex;min-width:640px}
+.rc{min-width:148px;padding:0 5px}
+.rt{font-size:9px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:1px;text-align:center;padding:5px 0 11px}
+.bm{background:var(--card);border:1px solid var(--bdr);border-radius:7px;margin-bottom:7px;overflow:hidden;transition:border-color .15s}
+.bm:hover{border-color:var(--gold)}
+.bm.fin{border:2px solid var(--gold)}
+.bt2{display:flex;align-items:center;gap:5px;padding:5px 8px;font-size:10px;font-weight:500}
+.bt2:first-child{border-bottom:1px solid var(--bdr)}
+.tbd{color:var(--mut);font-style:italic;font-size:9px}
+.bracket-ref{font-size:10px;color:var(--navy);font-weight:600}
+/* LIVE */
+.ap{background:var(--card);border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:13px}
+.ah{background:linear-gradient(135deg,var(--navy),var(--navy2));padding:11px 14px;color:#fff;display:flex;align-items:center;gap:8px}
+.ah h3{font-size:13px;font-weight:600;font-family:'Barlow Condensed',sans-serif;flex:1}
+.ab{padding:14px;min-height:90px}
+.ald{display:flex;align-items:center;gap:8px;color:var(--mut);font-size:12px}
+.dots span{animation:blink 1.4s infinite;opacity:0}
+.dots span:nth-child(2){animation-delay:.2s}
+.dots span:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,100%{opacity:0}50%{opacity:1}}
+.ar{font-size:13px;line-height:1.75;color:var(--txt)}
+.ar strong{color:var(--navy);font-weight:600}
+.ut{font-size:10px;color:var(--mut);margin-top:9px}
+.rb{background:rgba(255,255,255,.18);border:none;color:#fff;border-radius:7px;padding:5px 11px;font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px;transition:background .15s}
+.rb:hover{background:rgba(255,255,255,.3)}
+.spin{animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.4)}}
+.ld{width:8px;height:8px;border-radius:50%;background:#f55;animation:pulse 1s infinite}
+/* NEWS */
+.news-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.auto-badge{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--mut);background:#f0f2f8;padding:4px 10px;border-radius:20px;border:1px solid var(--bdr)}
+.auto-dot{width:6px;height:6px;border-radius:50%;background:#388e3c;animation:pulse 2s infinite}
+.ng{display:grid;gap:8px}
+.nc{background:var(--card);border:1px solid var(--bdr);border-radius:10px;padding:12px 14px;cursor:pointer;transition:border-color .15s;display:flex;gap:11px}
+.nc:hover{border-color:#aab4d0}
+.ni{width:42px;height:42px;border-radius:8px;background:#f8f9fc;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+.ntg{font-size:9px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.8px}
+.nti{font-size:13px;font-weight:500;color:var(--txt);margin:3px 0 4px;line-height:1.35}
+.ndt{font-size:10px;color:var(--mut)}
+.news-cd{font-size:10px;color:var(--mut);margin-top:8px;text-align:right}
+/* TV */
+.tvh{background:linear-gradient(135deg,var(--navy),var(--navy2));border-radius:10px;padding:14px 16px;margin-bottom:11px;color:#fff}
+.tvh h3{font-size:15px;font-weight:700;font-family:'Barlow Condensed',sans-serif;letter-spacing:.5px}
+.tvh p{font-size:11px;color:rgba(255,255,255,.6);margin-top:3px}
+.tvmi{background:rgba(255,255,255,.1);border-radius:7px;padding:9px 12px;margin-top:9px}
+.tvmi .t{font-size:14px;font-weight:600}
+.tvmi .d{font-size:11px;color:#e8c040;margin-top:2px}
+.tvcs{display:grid;gap:8px}
+.tvc{background:var(--card);border:1px solid var(--bdr);border-radius:10px;padding:12px 14px;display:flex;gap:12px;align-items:center}
+.tvl{width:48px;height:48px;border-radius:9px;border:1px solid var(--bdr);display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;flex-shrink:0}
+.tvn{font-size:14px;font-weight:600;font-family:'Barlow Condensed',sans-serif}
+.tvd{font-size:11px;color:var(--mut);margin-top:2px;line-height:1.4}
+.tvbdg{margin-top:5px}
+.bfr{background:#e8f5e9;color:#1b5e20}
+.bsb{background:#fce4ec;color:#880e4f}
+.bpb{background:#fff3e0;color:#e65100}
+/* SEDES */
+.sdg{display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:9px}
+.sdc{background:var(--card);border:1px solid var(--bdr);border-radius:9px;padding:11px 13px}
+.sdf{font-size:20px;margin-bottom:5px}
+.sdci{font-size:14px;font-weight:700;font-family:'Barlow Condensed',sans-serif;color:var(--navy)}
+.sdst{font-size:11px;color:var(--mut);margin:2px 0 6px}
+.sdm{display:flex;gap:5px;flex-wrap:wrap}
+.sdt2{font-size:10px;font-weight:600;padding:2px 7px;border-radius:3px;background:#f0f2f8;color:var(--navy)}
+.empty{text-align:center;padding:24px;color:var(--mut);font-size:13px}
+.coach-line{font-size:13px;color:var(--mut);margin-bottom:12px}
+.coach-line strong{color:var(--navy)}
+</style>
 </head>
 <body>
-    <div id="loginScreen">
-        <div class="login-card">
-            <div class="logo">🏆</div>
-            <h1>COPA MUNDIAL 2026</h1>
-            <p>Acceso autorizado · 1 dispositivo por cuenta</p>
-            <input type="email" id="email" placeholder="Email">
-            <input type="password" id="password" placeholder="Contraseña">
-            <button onclick="login()">🔐 Ingresar</button>
-            <div id="errorMsg" class="error-msg"></div>
-        </div>
+<div class="app">
+<div class="hdr">
+  <div class="hi">
+    <div class="hl">
+      <img src="data:image/png;base64,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" class="logo-img" alt="FIFA World Cup 2026">
+      <div class="htx">
+        <h1>COPA MUNDIAL FIFA 2026</h1>
+        <p>Estados Unidos &middot; Canad&aacute; &middot; M&eacute;xico</p>
+      </div>
     </div>
-    <div id="appScreen">
-        <button class="logout-btn" onclick="logout()">🚪 Cerrar sesión</button>
-        <div class="info-sesion">🔒 Sesión activa - 1 dispositivo</div>
-        <div class="app">
-            <div class="hdr"><div class="hi"><div class="hl"><div class="logo">🏆</div><div class="htx"><h1>COPA MUNDIAL FIFA 2026</h1><p>Estados Unidos · Canadá · México</p></div></div><div class="hr2"><div class="hd">11 jun — 19 jul 2026</div><div class="hb">48 equipos · 104 partidos</div></div></div></div>
-            <div class="gline"></div>
-            <div class="nav">
-                <button class="nb active" onclick="showSection('grupos')">🏆 Grupos</button>
-                <button class="nb" onclick="showSection('partidos')">📅 Partidos</button>
-                <button class="nb" onclick="showSection('clasificacion')">📊 Clasificación</button>
-                <button class="nb" onclick="showSection('jugadores')">👥 Jugadores</button>
-                <button class="nb" onclick="showSection('goleadores')">⚽ Goleadores</button>
-                <button class="nb" onclick="showSection('cruces')">🔀 Cruces</button>
-                <button class="nb" onclick="showSection('resultados')">🔴 Resultados</button>
-                <button class="nb" onclick="showSection('noticias')">📰 Noticias</button>
-                <button class="nb" onclick="showSection('tv')">📺 Dónde ver</button>
-                <button class="nb" onclick="showSection('sedes')">🏟️ Sedes</button>
-            </div>
-            <div class="sec active" id="sec-grupos"><div class="stitle">Fase de Grupos — 12 Grupos · 48 Equipos</div><div id="gruposContainer" class="gg"></div></div>
-            <div class="sec" id="sec-partidos"><div class="stitle">Calendario Oficial</div><div id="partidosContainer"></div></div>
-            <div class="sec" id="sec-clasificacion"><div class="stitle">Clasificación</div><div class="stt" id="gruposTabs"></div><div id="clasificacionContainer"></div></div>
-            <div class="sec" id="sec-jugadores"><div class="stitle">Plantillas Oficiales</div><select class="team-selector" id="teamSelect" onchange="cambiarEquipo(this.value)"><option>Cargando...</option></select><div id="jugadorInfo"></div><div id="plantillaContainer"></div></div>
-            <div class="sec" id="sec-goleadores"><div class="stitle">⚽ Máximos Goleadores</div><div id="goleadoresContainer"></div></div>
-            <div class="sec" id="sec-cruces"><div class="stitle">Eliminatorias</div><div class="bw"><div class="bk" id="crucesContainer"></div></div></div>
-            <div class="sec" id="sec-resultados"><div class="stitle">Resultados</div><div id="resultadosContainer"></div></div>
-            <div class="sec" id="sec-noticias"><div class="stitle">Noticias</div><div id="noticiasContainer"></div></div>
-            <div class="sec" id="sec-tv"><div class="stitle">📺 Dónde Ver</div><div id="tvContainer"></div></div>
-            <div class="sec" id="sec-sedes"><div class="stitle">Sedes</div><div class="sdg" id="sedesContainer"></div></div>
-        </div>
+    <div class="hr2">
+      <div class="hd">11 jun &mdash; 19 jul 2026</div>
+      <div class="hb">48 equipos &middot; 104 partidos</div>
     </div>
-    <div class="modal-overlay" id="playerModal" onclick="if(event.target===this) cerrarModal()"><div class="modal-box"><div class="modal-head"><button class="modal-close" onclick="cerrarModal()">✕</button><div class="modal-flag" id="modalFlag"></div><div class="modal-name" id="modalName"></div><div class="modal-team" id="modalTeam"></div></div><div class="modal-body" id="modalBody"></div></div></div>
+  </div>
+</div>
+<div class="gline"></div>
+<div class="nav" id="nav">
+  <button class="nb active" onclick="show('grupos',this)">&#x2B21; Grupos</button>
+  <button class="nb" onclick="show('partidos',this)">&#x1F4C5; Partidos</button>
+  <button class="nb" onclick="show('clasificacion',this)">&#x1F4CA; Clasificaci&oacute;n</button>
+  <button class="nb" onclick="show('jugadores',this)">&#x1F464; Jugadores</button>
+  <button class="nb" onclick="show('cruces',this)">&#x1F500; Cruces</button>
+  <button class="nb" onclick="show('resultados',this)">&#x1F534; Resultados</button>
+  <button class="nb" onclick="show('noticias',this)">&#x1F4F0; Noticias</button>
+  <button class="nb" onclick="show('tv',this)">&#x1F4FA; D&oacute;nde ver</button>
+  <button class="nb" onclick="show('sedes',this)">&#x1F3DF;&#xFE0F; Sedes</button>
+</div>
+
+<div class="sec active" id="sec-grupos">
+  <div class="stitle">Fase de Grupos &mdash; 12 Grupos &middot; 48 Equipos</div>
+  <div class="src-badge">&#x2713; Datos oficiales FIFA &mdash; Sorteo 5 dic 2025</div>
+  <div style="display:flex;gap:12px;margin-bottom:11px;flex-wrap:wrap">
+    <div class="gli"><div class="gld" style="background:#388e3c"></div> 1&ordm; y 2&ordm; &rarr; Dieciseisavos</div>
+    <div class="gli"><div class="gld" style="background:#1565c0"></div> 8 mejores 3&ordm;s &rarr; Dieciseisavos</div>
+  </div>
+  <div class="gg" id="gcon"></div>
+</div>
+
+<div class="sec" id="sec-partidos">
+  <div class="stitle">Calendario Oficial &mdash; Hora espa&ntilde;ola (CEST)</div>
+  <div class="src-badge">&#x2713; Fuente: FIFA oficial &mdash; horarios verificados</div>
+  <div class="fb" id="fbar">
+    <button class="fbt active" onclick="filterM('all',this)">Todos</button>
+    <button class="fbt" onclick="filterM('ESP',this)">&#x1F1EA;&#x1F1F8; Espa&ntilde;a</button>
+    <button class="fbt" onclick="filterM('ARG',this)">&#x1F1E6;&#x1F1F7; Argentina</button>
+    <button class="fbt" onclick="filterM('BRA',this)">&#x1F1E7;&#x1F1F7; Brasil</button>
+    <button class="fbt" onclick="filterM('FRA',this)">&#x1F1EB;&#x1F1F7; Francia</button>
+    <button class="fbt" onclick="filterM('GER',this)">&#x1F1E9;&#x1F1EA; Alemania</button>
+    <button class="fbt" onclick="filterM('POR',this)">&#x1F1F5;&#x1F1F9; Portugal</button>
+    <button class="fbt" onclick="filterM('ENG',this)">&#x1F3F4; Inglaterra</button>
+    <button class="fbt" onclick="filterM('RTVE',this)">&#x1F4FA; RTVE</button>
+  </div>
+  <div id="mcon"></div>
+</div>
+
+<div class="sec" id="sec-clasificacion">
+  <div class="stitle">Clasificaci&oacute;n por Grupo</div>
+  <div class="src-badge">&#x23F3; Torneo inicia 11 jun &mdash; se actualiza con resultados reales</div>
+  <div class="stt" id="stabs"></div>
+  <div id="stdcon"></div>
+</div>
+
+<div class="sec" id="sec-jugadores">
+  <div class="stitle">Plantillas Oficiales</div>
+  <div class="src-badge">&#x2713; Fuente: FIFA Squad Lists &mdash; 3 junio 2026, 02:23 UTC &mdash; 48 selecciones</div>
+  <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:13px" id="tfilter"></div>
+  <div id="squad-wrap"></div>
+</div>
+
+<div class="sec" id="sec-cruces">
+  <div class="stitle">Eliminatorias</div>
+  <div class="ib">
+    <div class="ib-i">&#x1F5D3;&#xFE0F;</div>
+    <div class="ib-t">
+      <h3>CRUCES POR DETERMINAR</h3>
+      <p>Los emparejamientos mostrados son los fijos seg&uacute;n el reglamento FIFA. Los equipos clasificados se conocer&aacute;n al concluir la fase de grupos (28 jun).</p>
+      <p style="margin-top:5px">Dieciseisavos: 28 jun&ndash;3 jul &middot; Octavos: 4&ndash;7 jul &middot; Cuartos: 9&ndash;11 jul &middot; Semis: 14&ndash;15 jul &middot; <strong style="color:#e8c040">FINAL: 19 jul &mdash; MetLife, Nueva Jersey</strong></p>
+    </div>
+  </div>
+  <div class="bw"><div class="bk" id="bracket"></div></div>
+</div>
+
+<div class="sec" id="sec-resultados">
+  <div class="stitle">Resultados en Tiempo Real</div>
+  <div id="cdwrap"></div>
+  <div class="ap">
+    <div class="ah">
+      <div class="ld" id="livdot" style="display:none"></div>
+      <span>&#x1F50D;</span>
+      <h3>Motor de b&uacute;squeda en tiempo real</h3>
+      <button class="rb" id="rbtn" onclick="fetchLive()"><span id="rico">&#x1F504;</span> Actualizar</button>
+    </div>
+    <div class="ab" id="aibody">
+      <div class="ald"><span>Cargando resultados</span><span class="dots"><span>.</span><span>.</span><span>.</span></span></div>
+    </div>
+  </div>
+</div>
+
+<div class="sec" id="sec-noticias">
+  <div class="news-hdr">
+    <div class="stitle" style="margin-bottom:0">Noticias</div>
+    <div class="auto-badge"><div class="auto-dot"></div> Auto &middot; cada 5 min</div>
+  </div>
+  <div id="ncon"><div class="ald" style="padding:20px"><span>Cargando noticias</span><span class="dots"><span>.</span><span>.</span><span>.</span></span></div></div>
+  <div class="news-cd" id="news-cd"></div>
+</div>
+
+<div class="sec" id="sec-tv">
+  <div class="stitle">D&oacute;nde Ver en Espa&ntilde;a</div>
+  <div id="tvcon"></div>
+</div>
+
+<div class="sec" id="sec-sedes">
+  <div class="stitle">16 Sedes Oficiales</div>
+  <div class="src-badge">&#x2713; Confirmadas por FIFA</div>
+  <div class="sdg" id="sdcon"></div>
+</div>
+</div>
+
+<script>
+const SQUADS={"ALG": {"name": "Argelia", "flag": "🇩🇿", "coach": "Vladimir Petković", "p": [[1, "GK", "MASTIL", "FC Stade Nyonnais (SUI)", "19/02/2000"], [2, "DF", "MANDI", "Lille OSC (FRA)", "22/10/1991"], [3, "DF", "ABADA", "USM Alger (ALG)", "15/06/1999"], [4, "DF", "TOUGAI", "Espérance De Tunisie (TUN)", "22/01/2000"], [5, "DF", "BELAID", "JS Kabylie (ALG)", "20/03/1999"], [6, "MF", "ZERROUKI", "FC Twente (NED)", "26/05/1998"], [7, "FW", "MAHREZ", "Al Ahli FC (KSA)", "21/02/1991"], [8, "MF", "AOUAR", "Al Ittihad (KSA)", "30/06/1998"], [9, "FW", "GOUIRI", "Olympique Marseille (FRA)", "16/02/2000"], [10, "MF", "CHAIBI", "Eintracht Frankfurt (GER)", "28/11/2002"], [11, "FW", "HADJ MOUSSA", "Feyenoord Rotterdam (NED)", "11/02/2002"], [12, "FW", "BENBOUALI", "Györi ETO FC (HUN)", "17/04/2000"], [13, "DF", "HADJAM", "BSC Young Boys (SUI)", "26/03/2003"], [14, "MF", "BOUDAOUI", "OGC Nice (FRA)", "23/09/1999"], [15, "DF", "AÏT NOURI", "Manchester City FC (ENG)", "06/06/2001"], [16, "GK", "BENBOT", "USM Alger (ALG)", "11/10/1994"], [17, "DF", "BELGHALI", "Hellas Verona FC (ITA)", "07/06/2002"], [18, "FW", "AMOURA", "VfL Wolfsburg (GER)", "09/05/2000"], [19, "MF", "BENTALEB", "Lille OSC (FRA)", "24/11/1994"], [20, "FW", "BOULBINA", "Al Duhail SC (QAT)", "02/05/2003"], [21, "DF", "BENSEBAINI", "Borussia Dortmund (GER)", "16/04/1995"], [22, "MF", "MAZA", "Bayer Leverkusen (GER)", "24/11/2005"], [23, "GK", "ZIDANE", "Granada CF (ESP)", "13/05/1998"], [24, "MF", "TITRAOUI", "Sporting Charleroi (BEL)", "26/08/2003"], [25, "FW", "GHEDJEMIS", "Frosinone (ITA)", "06/09/2002"], [26, "DF", "CHRGUI", "Paris FC (FRA)", "06/02/1999"]]}, "ARG": {"name": "Argentina", "flag": "🇦🇷", "coach": "Lionel Scaloni", "p": [[1, "GK", "MUSSO", "Atlético De Madrid (ESP)", "06/05/1994"], [2, "DF", "BALERDI", "Olympique Marseille (FRA)", "26/01/1999"], [3, "DF", "TAGLIAFICO", "Olympique Lyonnais (FRA)", "31/08/1992"], [4, "DF", "MONTIEL", "CA River Plate (ARG)", "01/01/1997"], [5, "MF", "PAREDES", "CA Boca Juniors (ARG)", "29/06/1994"], [6, "DF", "MARTÍNEZ", "Manchester United FC (ENG)", "18/01/1998"], [7, "MF", "DE PAUL", "Inter Miami CF (USA)", "24/05/1994"], [8, "MF", "BARCO", "RC Strasbourg (FRA)", "23/07/2004"], [9, "FW", "J. ALVAREZ", "Atlético De Madrid (ESP)", "31/01/2000"], [10, "FW", "MESSI", "Inter Miami CF (USA)", "24/06/1987"], [11, "MF", "LO CELSO", "Real Betis (ESP)", "09/04/1996"], [12, "GK", "RULLI", "Olympique Marseille (FRA)", "20/05/1992"], [13, "DF", "ROMERO", "Tottenham Hotspur FC (ENG)", "27/04/1998"], [14, "MF", "PALACIOS", "Bayer Leverkusen (GER)", "05/10/1998"], [15, "MF", "N. GONZALEZ", "Atlético De Madrid (ESP)", "06/04/1998"], [16, "FW", "ALMADA", "Atlético De Madrid (ESP)", "26/04/2001"], [17, "FW", "SIMEONE", "Atlético De Madrid (ESP)", "18/12/2002"], [18, "FW", "NICO PAZ", "Como (ITA)", "08/09/2004"], [19, "DF", "OTAMENDI", "SL Benfica (POR)", "12/02/1988"], [20, "MF", "MAC ALLISTER", "Liverpool FC (ENG)", "24/12/1998"], [21, "FW", "LOPEZ", "SE Palmeiras (BRA)", "06/12/2000"], [22, "FW", "L. MARTINEZ", "FC Internazionale Milano (ITA)", "22/08/1997"], [23, "GK", "E. MARTINEZ", "Aston Villa FC (ENG)", "02/09/1992"], [24, "MF", "E. FERNANDEZ", "Chelsea FC (ENG)", "17/01/2001"], [25, "DF", "MEDINA", "Olympique Marseille (FRA)", "28/05/1999"], [26, "DF", "MOLINA", "Atlético De Madrid (ESP)", "06/04/1998"]]}, "AUS": {"name": "Australia", "flag": "🇦🇺", "coach": "Tony Popovic", "p": [[1, "GK", "RYAN", "Levante UD (ESP)", "08/04/1992"], [2, "DF", "DEGENEK", "APOEL FC (CYP)", "28/04/1994"], [3, "DF", "CIRCATI", "Parma (ITA)", "10/10/2003"], [4, "DF", "ITALIANO", "Grazer AK (AUT)", "30/07/2001"], [5, "DF", "BOS", "Feyenoord Rotterdam (NED)", "29/10/2002"], [6, "DF", "GERIA", "Albirex Niigata (JPN)", "10/05/1993"], [7, "FW", "LECKIE", "Melbourne City FC (AUS)", "04/02/1991"], [8, "MF", "METCALFE", "FC St. Pauli (GER)", "05/11/1999"], [9, "FW", "TOURE", "Norwich City FC (ENG)", "26/03/2004"], [10, "FW", "HRUSTIC", "SC Heracles Almelo (NED)", "05/07/1996"], [11, "FW", "MABIL", "CD Castellón (ESP)", "15/09/1995"], [12, "GK", "IZZO", "Randers FC (DEN)", "06/01/1995"], [13, "MF", "O'NEILL", "New York City FC (USA)", "04/07/1998"], [14, "MF", "DEVLIN", "Heart Of Midlothian FC (SCO)", "07/06/1998"], [15, "DF", "TREWIN", "New York City FC (USA)", "18/05/2001"], [16, "DF", "BEHICH", "Melbourne City FC (AUS)", "16/12/1990"], [17, "FW", "IRANKUNDA", "Watford FC (ENG)", "09/02/2006"], [18, "GK", "BEACH", "Melbourne City FC (AUS)", "06/08/2003"], [19, "DF", "SOUTTAR", "Leicester City FC (ENG)", "22/10/1998"], [20, "FW", "VOLPATO", "US Sassuolo (ITA)", "15/11/2003"], [21, "DF", "BURGESS", "Swansea City AFC (WAL)", "21/10/1995"], [22, "MF", "IRVINE", "FC St. Pauli (GER)", "07/03/1993"], [23, "FW", "VELUPILLAY", "Melbourne Victory FC (AUS)", "07/05/2001"], [24, "MF", "OKON-ENGSTLER", "Sydney FC (AUS)", "24/01/2005"], [25, "DF", "HERRINGTON", "Colorado Rapids (USA)", "05/09/2007"], [26, "FW", "YENGI", "FC Machida Zelvia (JPN)", "28/11/2000"]]}, "AUT": {"name": "Austria", "flag": "🇦🇹", "coach": "Ralf Rangnick", "p": [[1, "GK", "SCHLAGER", "FC Red Bull Salzburg (AUT)", "01/02/1996"], [2, "DF", "AFFENGRUBER", "Elche CF (ESP)", "19/03/2001"], [3, "DF", "DANSO", "Tottenham Hotspur FC (ENG)", "19/09/1998"], [4, "MF", "XAVER", "RB Leipzig (GER)", "28/09/1997"], [5, "DF", "POSCH", "1. FSV Mainz 05 (GER)", "14/05/1997"], [6, "MF", "SEIWALD", "RB Leipzig (GER)", "04/05/2001"], [7, "FW", "ARNAUTOVIC", "FK Crvena Zvezda (SRB)", "19/04/1989"], [8, "DF", "ALABA", "Real Madrid C. F. (ESP)", "24/06/1992"], [9, "MF", "SABITZER", "Borussia Dortmund (GER)", "17/03/1994"], [10, "MF", "GRILLITSCH", "SC Braga (POR)", "07/08/1995"], [11, "FW", "GREGORITSCH", "FC Augsburg (GER)", "18/04/1994"], [12, "GK", "WIEGELE", "FC Viktoria Plzeň (CZE)", "21/03/2001"], [13, "GK", "PENTZ", "Brøndby IF (DEN)", "02/01/1997"], [14, "FW", "KALAJDZIC", "LASK Linz (AUT)", "07/07/1997"], [15, "DF", "LIENHART", "SC Freiburg (GER)", "11/07/1996"], [16, "DF", "MWENE", "1. FSV Mainz 05 (GER)", "29/01/1994"], [17, "MF", "CHUKWUEMEKA", "Borussia Dortmund (GER)", "20/10/2003"], [18, "MF", "SCHMID", "SV Werder Bremen (GER)", "27/01/2000"], [19, "MF", "BAUMGARTNER", "RB Leipzig (GER)", "01/08/1999"], [20, "MF", "LAIMER", "FC Bayern München (GER)", "27/05/1997"], [21, "FW", "WIMMER", "VfL Wolfsburg (GER)", "30/05/2001"], [22, "MF", "PRASS", "TSG Hoffenheim (GER)", "26/05/2001"], [23, "DF", "FRIEDL", "SV Werder Bremen (GER)", "16/03/1998"], [24, "MF", "WANNER", "PSV Eindhoven (NED)", "23/12/2005"], [25, "DF", "SVOBODA", "Venezia FC (ITA)", "15/10/1998"], [26, "MF", "SCHÖPF", "Wolfsberger AC (AUT)", "07/02/1994"]]}, "BEL": {"name": "Bélgica", "flag": "🇧🇪", "coach": "Rudi Garcia", "p": [[1, "GK", "COURTOIS", "Real Madrid C. F. (ESP)", "11/05/1992"], [2, "DF", "DEBAST", "Sporting CP (POR)", "24/10/2003"], [3, "DF", "THEATE", "Eintracht Frankfurt (GER)", "25/05/2000"], [4, "DF", "MECHELE", "Club Brugge (BEL)", "28/01/1993"], [5, "DF", "DE CUYPER", "Brighton & Hove Albion FC (ENG)", "22/12/2000"], [6, "MF", "WITSEL", "Girona FC (ESP)", "12/01/1989"], [7, "MF", "DE BRUYNE", "SSC Napoli (ITA)", "28/06/1991"], [8, "MF", "TIELEMANS", "Aston Villa FC (ENG)", "07/05/1997"], [9, "FW", "LUKAKU", "SSC Napoli (ITA)", "13/05/1993"], [10, "FW", "TROSSARD", "Arsenal FC (ENG)", "04/12/1994"], [11, "FW", "DOKU", "Manchester City FC (ENG)", "27/05/2002"], [12, "GK", "LAMMENS", "Manchester United FC (ENG)", "07/07/2002"], [13, "GK", "PENDERS", "RC Strasbourg (FRA)", "31/07/2005"], [14, "FW", "LUKEBAKIO", "SL Benfica (POR)", "24/09/1997"], [15, "DF", "MEUNIER", "Lille OSC (FRA)", "12/09/1991"], [16, "DF", "DE WINTER", "AC Milan (ITA)", "12/06/2002"], [17, "FW", "DE KETELAERE", "Atalanta Bergamo (ITA)", "10/03/2001"], [18, "DF", "SEYS", "Club Brugge (BEL)", "28/03/2005"], [19, "MF", "MOREIRA", "RC Strasbourg (FRA)", "06/08/2004"], [20, "MF", "VANAKEN", "Club Brugge (BEL)", "24/08/1992"], [21, "DF", "CASTAGNE", "Fulham FC (ENG)", "05/12/1995"], [22, "MF", "SAELEMAEKERS", "AC Milan (ITA)", "27/06/1999"], [23, "MF", "RASKIN", "Rangers FC (SCO)", "23/02/2001"], [24, "MF", "ONANA", "Aston Villa FC (ENG)", "16/08/2001"], [25, "DF", "NGOY", "Lille OSC (FRA)", "10/06/2003"], [26, "FW", "FERNANDEZ-PARDO", "Lille OSC (FRA)", "03/02/2005"]]}, "BIH": {"name": "Bosnia", "flag": "🇧🇦", "coach": "Sergej Barbarez", "p": [[1, "GK", "VASILJ", "FC St. Pauli (GER)", "02/12/1995"], [2, "DF", "MUJAKIĆ", "Gaziantep FK (TUR)", "15/04/1998"], [3, "DF", "HADŽIKADUNIĆ", "UC Sampdoria (ITA)", "09/07/1998"], [4, "DF", "MUHAREMOVIĆ", "US Sassuolo (ITA)", "28/02/2003"], [5, "DF", "KOLAŠINAC", "Atalanta Bergamo (ITA)", "20/06/1993"], [6, "MF", "TAHIROVIĆ", "Brøndby IF (DEN)", "03/03/2003"], [7, "DF", "DEDIĆ", "SL Benfica (POR)", "18/08/2002"], [8, "MF", "GIGOVIĆ", "BSC Young Boys (SUI)", "06/04/2002"], [9, "FW", "BAŽDAR", "Jagiellonia Białystok (POL)", "31/01/2004"], [10, "FW", "DEMIROVIĆ", "VfB Stuttgart (GER)", "25/03/1998"], [11, "FW", "DŽEKO", "FC Schalke 04 (GER)", "17/03/1986"], [12, "GK", "JURKAS", "FK Borac Banja Luka (BIH)", "07/10/2007"], [13, "MF", "BAŠIĆ", "FC Astana (KAZ)", "30/04/2002"], [14, "MF", "ŠUNJIĆ", "Pafos FC (CYP)", "09/10/1996"], [15, "MF", "MEMIĆ", "FC Viktoria Plzeň (CZE)", "20/01/2001"], [16, "MF", "HADŽIAHMETOVIĆ", "Hull City FC (ENG)", "08/03/1997"], [17, "MF", "BURNIĆ", "Karlsruher SC (GER)", "22/05/1998"], [18, "DF", "KATIĆ", "FC Schalke 04 (GER)", "10/10/1996"], [19, "FW", "ALAJBEGOVIĆ", "FC Red Bull Salzburg (AUT)", "21/09/2007"], [20, "FW", "BAJRAKTAREVIĆ", "PSV Eindhoven (NED)", "10/03/2005"], [21, "DF", "RADELJIĆ", "HNK Rijeka (CRO)", "05/09/1997"], [22, "GK", "ZLOMISLIĆ", "HNK Rijeka (CRO)", "16/08/1998"], [23, "FW", "TABAKOVIĆ", "Borussia Mönchengladbach (GER)", "20/06/1994"], [24, "DF", "ČELIK", "RC Lens (FRA)", "17/07/2006"], [25, "FW", "LUKIĆ", "Universitatea Cluj (ROU)", "28/11/1998"], [26, "MF", "MAHMIĆ", "FC Slovan Liberec (CZE)", "14/03/2005"]]}, "BRA": {"name": "Brasil", "flag": "🇧🇷", "coach": "Carlo Ancelotti", "p": [[1, "GK", "A. BECKER", "Liverpool FC (ENG)", "02/10/1992"], [2, "DF", "WESLEY", "AS Roma (ITA)", "06/09/2003"], [3, "DF", "GABRIEL", "Arsenal FC (ENG)", "19/12/1997"], [4, "DF", "MARQUINHOS", "Paris Saint-Germain (FRA)", "14/05/1994"], [5, "MF", "CASEMIRO", "Manchester United FC (ENG)", "23/02/1992"], [6, "DF", "ALEX SANDRO", "CR Flamengo (BRA)", "26/01/1991"], [7, "FW", "VINI JR.", "Real Madrid C. F. (ESP)", "12/07/2000"], [8, "MF", "BRUNO G.", "Newcastle United FC (ENG)", "16/11/1997"], [9, "FW", "CUNHA", "Manchester United FC (ENG)", "27/05/1999"], [10, "FW", "NEYMAR JR", "Santos FC (BRA)", "05/02/1992"], [11, "FW", "RAPHINHA", "FC Barcelona (ESP)", "14/12/1996"], [12, "GK", "WEVERTON", "Grêmio FBPA (BRA)", "13/12/1987"], [13, "DF", "DANILO", "CR Flamengo (BRA)", "15/07/1991"], [14, "DF", "BREMER", "Juventus FC (ITA)", "18/03/1997"], [15, "DF", "LEO PEREIRA", "CR Flamengo (BRA)", "31/01/1996"], [16, "DF", "DOUGLAS SANTOS", "FC Zenit St. Petersburg (RUS)", "22/03/1994"], [17, "MF", "FABINHO", "Al Ittihad (KSA)", "23/10/1993"], [18, "MF", "DANILO S.", "Botafogo (BRA)", "29/04/2001"], [19, "FW", "ENDRICK", "Olympique Lyonnais (FRA)", "21/07/2006"], [20, "MF", "L. PAQUETA", "CR Flamengo (BRA)", "27/08/1997"], [21, "FW", "L. HENRIQUE", "FC Zenit St. Petersburg (RUS)", "02/01/2001"], [22, "FW", "MARTINELLI", "Arsenal FC (ENG)", "18/06/2001"], [23, "GK", "EDERSON", "Fenerbahçe SK (TUR)", "17/08/1993"], [24, "DF", "IBAÑEZ", "Al Ahli FC (KSA)", "23/11/1998"], [25, "FW", "THIAGO", "Brentford FC (ENG)", "26/06/2001"], [26, "FW", "RAYAN", "AFC Bournemouth (ENG)", "03/08/2006"]]}, "CPV": {"name": "Cabo Verde", "flag": "🇨🇻", "coach": "Pedro Bübista", "p": [[1, "GK", "VOZINHA", "GD Chaves (POR)", "03/06/1986"], [2, "DF", "STOPIRA", "SCU Torreense (POR)", "20/05/1988"], [3, "DF", "BORGES", "Al Bataeh Club (UAE)", "17/01/1995"], [4, "DF", "LOPES", "Shamrock Rovers FC (IRL)", "17/06/1992"], [5, "DF", "LOGAN", "Villarreal CF (ESP)", "01/04/2001"], [6, "MF", "KEVIN L.", "FC Krasnodar (RUS)", "27/01/1997"], [7, "MF", "JOVANE", "CF Estrela Da Amadora (POR)", "14/06/1998"], [8, "MF", "JOÃO PAULO", "FC FCSB (ROU)", "26/05/1998"], [9, "FW", "BENCHIMOL", "FC Akron Tolyatti (RUS)", "29/12/2001"], [10, "MF", "MONTEIRO", "PEC Zwolle (NED)", "23/11/1993"], [11, "MF", "RODRIGUES", "Apollon Limassol (CYP)", "27/11/1990"], [12, "GK", "MARCIO", "PFC Montana (BUL)", "23/02/1997"], [13, "DF", "LOPES CABRAL", "SL Benfica (POR)", "18/09/2002"], [14, "MF", "D. DUARTE", "PFC Ludogorets Razgrad (BUL)", "04/07/1999"], [15, "MF", "DUARTE", "Puskás Akadémia FC (HUN)", "28/02/1997"], [16, "MF", "Y. SEMEDO", "SC Farense (POR)", "29/12/1995"], [17, "MF", "SEMEDO", "AC Omonia (CYP)", "27/04/1994"], [18, "MF", "ARCANJO", "Vitória SC (POR)", "21/06/2001"], [19, "FW", "LIVRAMENTO", "Casa Pia AC (POR)", "04/05/2001"], [20, "FW", "RYAN", "Iğdır FK (TUR)", "08/01/1990"], [21, "MF", "DA COSTA", "Başakşehir FK (TUR)", "10/02/1991"], [22, "DF", "MOREIRA", "Columbus Crew (USA)", "13/08/1994"], [23, "GK", "DOS SANTOS", "San Diego FC (USA)", "24/08/2000"], [24, "DF", "WAGNER P.", "Trabzonspor (TUR)", "03/11/2002"], [25, "DF", "KELVIN", "SJK (FIN)", "05/06/2000"], [26, "MF", "HÉLIO", "Maccabi Tel-Aviv FC (ISR)", "03/05/2002"]]}, "CAN": {"name": "Canadá", "flag": "🇨🇦", "coach": "Jesse Marsch", "p": [[1, "GK", "ST. CLAIR", "Inter Miami CF (USA)", "09/05/1997"], [2, "DF", "JOHNSTON", "Celtic FC (SCO)", "08/10/1998"], [3, "DF", "JONES", "Middlesbrough FC (ENG)", "07/10/1997"], [4, "DF", "DE FOUGEROLLES", "FCV Dender EH (BEL)", "12/10/2005"], [5, "DF", "WATERMAN", "Chicago Fire FC (USA)", "24/01/1996"], [6, "MF", "CHOINIÈRE", "LAFC (USA)", "07/02/1999"], [7, "MF", "EUSTÀQUIO", "LAFC (USA)", "21/12/1996"], [8, "MF", "KONÉ", "US Sassuolo (ITA)", "16/06/2002"], [9, "FW", "LARIN", "Southampton FC (ENG)", "17/04/1995"], [10, "FW", "J. DAVID", "Juventus FC (ITA)", "14/01/2000"], [11, "MF", "MILLAR", "Hull City FC (ENG)", "27/09/1999"], [12, "FW", "OLUWASEYI", "Villarreal CF (ESP)", "15/05/2000"], [13, "DF", "CORNELIUS", "Rangers FC (SCO)", "25/11/1997"], [14, "MF", "SHAFFELBURG", "LAFC (USA)", "26/11/1999"], [15, "DF", "BOMBITO", "OGC Nice (FRA)", "30/03/2000"], [16, "GK", "CRÉPEAU", "Orlando City SC (USA)", "11/05/1994"], [17, "FW", "BUCHANAN", "Villarreal CF (ESP)", "08/02/1999"], [18, "GK", "GOODMAN", "Barnsley (ENG)", "27/11/2003"], [19, "DF", "DAVIES", "FC Bayern München (GER)", "02/11/2000"], [20, "FW", "AHMED", "Norwich City FC (ENG)", "10/10/2000"], [21, "MF", "OSORIO", "Toronto FC (CAN)", "12/06/1992"], [22, "DF", "LARYEA", "Toronto FC (CAN)", "07/01/1995"], [23, "DF", "SIGUR", "HNK Hajduk Split (CRO)", "09/09/2003"], [24, "FW", "PROMISE", "Royale Union Saint-Gilloise (BEL)", "03/07/2001"], [25, "MF", "SALIBA", "RSC Anderlecht (BEL)", "07/02/2004"], [26, "MF", "MARCELO", "Tigres UANL (MEX)", "01/10/2003"]]}, "COL": {"name": "Colombia", "flag": "🇨🇴", "coach": "Néstor Lorenzo", "p": [[1, "GK", "OSPINA", "Atlético Nacional (COL)", "31/08/1988"], [2, "DF", "D. MUÑOZ", "Crystal Palace FC (ENG)", "26/05/1996"], [3, "DF", "J. LUCUMI", "Bologna FC (ITA)", "26/06/1998"], [4, "DF", "ARIAS", "CA Independiente (ARG)", "13/01/1992"], [5, "MF", "K. CASTAÑO", "CA River Plate (ARG)", "29/09/2000"], [6, "MF", "RICHARD RIOS", "SL Benfica (POR)", "02/06/2000"], [7, "FW", "LUIS DIAZ", "FC Bayern München (GER)", "13/01/1997"], [8, "MF", "CARRASCAL", "CR Flamengo (BRA)", "25/05/1998"], [9, "FW", "CORDOBA", "FC Krasnodar (RUS)", "11/05/1993"], [10, "MF", "JAMES", "Minnesota United FC (USA)", "12/07/1991"], [11, "MF", "J. ARIAS", "SE Palmeiras (BRA)", "21/09/1997"], [12, "GK", "C. VARGAS", "Atlas FC (MEX)", "09/03/1989"], [13, "DF", "Y. MINA", "Cagliari (ITA)", "23/09/1994"], [14, "DF", "PUERTA", "Racing Santander (ESP)", "23/07/2003"], [15, "MF", "PORTILLA", "Athletico Paranaense (BRA)", "12/09/1998"], [16, "MF", "J. LERMA", "Crystal Palace FC (ENG)", "25/10/1994"], [17, "DF", "J. MOJICA", "RCD Mallorca (ESP)", "21/08/1992"], [18, "DF", "W. DITTA", "CF Cruz Azul (MEX)", "23/01/1998"], [19, "FW", "C. HERNANDEZ", "Real Betis (ESP)", "20/04/1999"], [20, "MF", "QUINTERO", "CA River Plate (ARG)", "18/01/1993"], [21, "FW", "CAMPAZ", "CA Rosario Central (ARG)", "24/05/2000"], [22, "DF", "MACHADO", "FC Nantes (FRA)", "02/09/1993"], [23, "DF", "SANCHEZ", "Galatasaray SK (TUR)", "12/06/1996"], [24, "GK", "MONTERO", "CA Vélez Sarsfield (ARG)", "29/03/1995"], [25, "FW", "SUAREZ", "Sporting CP (POR)", "02/12/1997"], [26, "FW", "A. GOMEZ", "CR Vasco Da Gama (BRA)", "12/09/2002"]]}, "COD": {"name": "RD Congo", "flag": "🇨🇩", "coach": "Sebastien Desabre", "p": [[1, "GK", "MPASI", "Le Havre AC (FRA)", "01/08/1994"], [2, "DF", "WAN BISSAKA", "West Ham United FC (ENG)", "26/11/1997"], [3, "DF", "KAPUADI", "Widzew Łódź (POL)", "30/04/1998"], [4, "DF", "TUANZEBE", "Burnley FC (ENG)", "14/11/1997"], [5, "DF", "BATUBINSIKA", "AEL FC (GRE)", "15/02/1996"], [6, "MF", "MUKAU", "Lille OSC (FRA)", "03/11/2004"], [7, "MF", "MBUKU", "Montpellier HSC (FRA)", "16/03/2002"], [8, "MF", "MOUTOUSSAMY", "Atromitos FC (GRE)", "12/08/1996"], [9, "FW", "CIPENGA", "CD Castellón (ESP)", "11/03/1998"], [10, "MF", "BONGONDA", "FC Spartak Moscow (RUS)", "20/11/1995"], [11, "FW", "KAKUTA", "AEL FC (GRE)", "21/06/1991"], [12, "DF", "J. KAYEMBE", "KRC Genk (BEL)", "08/08/1994"], [13, "FW", "ELIA", "Alanyaspor (TUR)", "06/08/1997"], [14, "MF", "SADIKI", "Sunderland AFC (ENG)", "17/12/2004"], [15, "MF", "AARON", "Kilmarnock FC (SCO)", "02/01/1995"], [16, "GK", "FAYULU", "FC Noah (ARM)", "24/07/1999"], [17, "FW", "BAKAMBU", "Real Betis (ESP)", "11/04/1991"], [18, "MF", "PICKEL", "RCD Espanyol (ESP)", "15/05/1997"], [19, "FW", "MAYELE", "Pyramids FC (EGY)", "24/06/1994"], [20, "FW", "WISSA", "Newcastle United FC (ENG)", "03/09/1996"], [21, "GK", "EPOLO", "Standard Liège (BEL)", "15/01/2005"], [22, "DF", "MBEMBA", "Lille OSC (FRA)", "08/08/1994"], [23, "FW", "BANZA", "Al Jazira (UAE)", "13/08/1996"], [24, "DF", "G. KALULU", "Aris Limassol FC (CYP)", "29/08/1997"], [25, "MF", "KAYEMBE", "Watford FC (ENG)", "03/06/1998"], [26, "DF", "MASUAKU", "RC Lens (FRA)", "07/11/1993"]]}, "CIV": {"name": "Costa de Marfil", "flag": "🇨🇮", "coach": "Emerse Faé", "p": [[1, "GK", "Y. FOFANA", "Çaykur Rizespor (TUR)", "21/08/2000"], [2, "DF", "O. DIOMANDE", "Sporting CP (POR)", "04/12/2003"], [3, "DF", "G. KONAN", "Gil Vicente FC (POR)", "27/12/1995"], [4, "MF", "SERI", "NK Maribor (SVN)", "19/07/1991"], [5, "DF", "SINGO", "Galatasaray SK (TUR)", "25/12/2000"], [6, "MF", "FOFANA", "FC Porto (POR)", "07/05/1995"], [7, "DF", "KOSSOUNOU", "Atalanta Bergamo (ITA)", "04/01/2001"], [8, "MF", "KESSIE", "Al Ahli FC (KSA)", "19/12/1996"], [9, "FW", "BONNY", "FC Internazionale Milano (ITA)", "25/10/2003"], [10, "FW", "ADINGRA", "AS Monaco (FRA)", "01/01/2002"], [11, "FW", "YAN DIOMANDE", "RB Leipzig (GER)", "14/11/2006"], [12, "FW", "WAHI", "OGC Nice (FRA)", "02/01/2003"], [13, "DF", "OPERI", "Başakşehir FK (TUR)", "29/04/1997"], [14, "FW", "DIAKITE", "Cercle Brugge (BEL)", "20/12/2003"], [15, "FW", "AMAD", "Manchester United FC (ENG)", "11/07/2002"], [16, "GK", "KONE", "Sporting Charleroi (BEL)", "07/03/2002"], [17, "DF", "G. DOUE", "RC Strasbourg (FRA)", "17/10/2002"], [18, "MF", "SANGARE", "Nottingham Forest FC (ENG)", "02/12/1997"], [19, "FW", "PEPE", "Villarreal CF (ESP)", "29/05/1995"], [20, "DF", "AGBADOU", "Beşiktaş JK (TUR)", "17/06/1997"], [21, "DF", "NDICKA", "AS Roma (ITA)", "20/08/1999"], [22, "FW", "GUESSAND", "Crystal Palace FC (ENG)", "01/07/2001"], [23, "GK", "LAFONT", "Panathinaikos FC (GRE)", "23/01/1999"], [24, "FW", "TOURE", "TSG Hoffenheim (GER)", "02/03/2006"], [25, "MF", "GUIAGON", "Sporting Charleroi (BEL)", "22/02/2001"], [26, "MF", "INAO", "Trabzonspor (TUR)", "06/04/2006"]]}, "CRO": {"name": "Croacia", "flag": "🇭🇷", "coach": "Zlatko Dalić", "p": [[1, "GK", "LIVAKOVIĆ", "GNK Dinamo Zagreb (CRO)", "09/01/1995"], [2, "DF", "STANIŠIĆ", "FC Bayern München (GER)", "02/04/2000"], [3, "DF", "PONGRAČIĆ", "ACF Fiorentina (ITA)", "11/09/1997"], [4, "DF", "GVARDIOL", "Manchester City FC (ENG)", "23/01/2002"], [5, "DF", "ĆALETA-CAR", "Real Sociedad (ESP)", "17/09/1996"], [6, "DF", "ŠUTALO", "AFC Ajax (NED)", "28/02/2000"], [7, "MF", "MORO", "Bologna FC (ITA)", "12/03/1998"], [8, "MF", "KOVAČIĆ", "Manchester City FC (ENG)", "06/05/1994"], [9, "FW", "KRAMARIĆ", "TSG Hoffenheim (GER)", "19/06/1991"], [10, "MF", "MODRIĆ", "AC Milan (ITA)", "09/09/1985"], [11, "FW", "BUDIMIR", "CA Osasuna (ESP)", "22/07/1991"], [12, "GK", "PANDUR", "Hull City FC (ENG)", "25/03/2000"], [13, "MF", "VLAŠIĆ", "Torino FC (ITA)", "04/10/1997"], [14, "FW", "PERIŠIĆ", "PSV Eindhoven (NED)", "02/02/1989"], [15, "MF", "PAŠALIĆ", "Atalanta Bergamo (ITA)", "09/02/1995"], [16, "MF", "BATURINA", "Como (ITA)", "16/02/2003"], [17, "MF", "P. SUČIĆ", "FC Internazionale Milano (ITA)", "25/10/2003"], [18, "DF", "JAKIĆ", "FC Augsburg (GER)", "14/05/1997"], [19, "MF", "FRUK", "HNK Rijeka (CRO)", "09/03/2001"], [20, "FW", "MATANOVIĆ", "SC Freiburg (GER)", "31/03/2003"], [21, "MF", "SUČIĆ", "Real Sociedad (ESP)", "08/09/2002"], [22, "DF", "VUŠKOVIĆ", "Hamburger SV (GER)", "24/02/2007"], [23, "GK", "KOTARSKI", "FC København (DEN)", "10/02/2000"], [24, "FW", "M. PAŠALIĆ", "Orlando City SC (USA)", "14/09/2000"], [25, "DF", "ERLIĆ", "FC Midtjylland (DEN)", "24/01/1998"], [26, "FW", "MUSA", "FC Dallas (USA)", "04/03/1998"]]}, "CUW": {"name": "Curazao", "flag": "🇨🇼", "coach": "Dick Advocaat", "p": [[1, "GK", "ROOM", "Miami FC (USA)", "06/02/1989"], [2, "DF", "SAMBO", "Sparta Rotterdam (NED)", "19/08/2001"], [3, "DF", "GAARI", "Abha Club (KSA)", "23/12/1993"], [4, "DF", "VAN EIJMA", "RKC Waalwijk (NED)", "09/06/1998"], [5, "DF", "FLORANUS", "PEC Zwolle (NED)", "23/08/1998"], [6, "MF", "ROEMERATOE", "RKC Waalwijk (NED)", "19/08/1999"], [7, "MF", "J. BACUNA", "FC Volendam (NED)", "07/08/1997"], [8, "MF", "COMENENCIA", "FC Zürich (SUI)", "03/02/2004"], [9, "FW", "LOCADIA", "Miami FC (USA)", "07/11/1993"], [10, "MF", "L. BACUNA", "Iğdır FK (TUR)", "21/08/1991"], [11, "FW", "ANTONISSE", "AE Kifisia FC (GRE)", "29/03/2002"], [12, "FW", "HANSEN", "Middlesbrough FC (ENG)", "18/05/2002"], [13, "FW", "NOSLIN", "SC Telstar (NED)", "11/09/2002"], [14, "FW", "GORRE", "Maccabi Haifa FC (ISR)", "29/09/1994"], [15, "MF", "MARTHA", "Rotherham United FC (ENG)", "04/09/2003"], [16, "FW", "MARGARITHA", "SK Beveren (BEL)", "10/04/2000"], [17, "FW", "KUWAS", "FC Volendam (NED)", "19/09/1992"], [18, "DF", "OBISPO", "PSV Eindhoven (NED)", "05/03/1999"], [19, "FW", "KASTANEER", "Terengganu FC (MAS)", "09/06/1996"], [20, "DF", "BRENET", "Kayserispor (TUR)", "20/03/1994"], [21, "MF", "CHONG", "Sheffield United FC (ENG)", "04/12/1999"], [22, "MF", "FELIDA", "FC Den Bosch (NED)", "11/11/1999"], [23, "DF", "BAZOER", "Konyaspor (TUR)", "12/10/1996"], [24, "DF", "FONVILLE", "NEC Nijmegen (NED)", "16/05/2003"], [25, "GK", "BODAK", "SC Telstar (NED)", "15/05/2002"], [26, "GK", "DOORNBUSCH", "VVV Venlo (NED)", "06/07/1999"]]}, "CZE": {"name": "Rep. Checa", "flag": "🇨🇿", "coach": "Miroslav Koubek", "p": [[1, "GK", "KOVÁŘ", "PSV Eindhoven (NED)", "17/05/2000"], [2, "DF", "ZIMA", "SK Slavia Praha (CZE)", "08/11/2000"], [3, "DF", "HOLEŠ", "SK Slavia Praha (CZE)", "31/03/1993"], [4, "DF", "HRANÁČ", "TSG Hoffenheim (GER)", "29/01/2000"], [5, "DF", "COUFAL", "TSG Hoffenheim (GER)", "22/08/1992"], [6, "DF", "CHALOUPEK", "SK Slavia Praha (CZE)", "08/03/2003"], [7, "DF", "KREJČÍ", "Wolverhampton Wanderers FC (ENG)", "20/04/1999"], [8, "MF", "DARIDA", "FC Hradec Králové (CZE)", "08/08/1990"], [9, "FW", "HLOŽEK", "TSG Hoffenheim (GER)", "25/07/2002"], [10, "FW", "SCHICK", "Bayer Leverkusen (GER)", "24/01/1996"], [11, "FW", "KUCHTA", "AC Sparta Praha (CZE)", "08/01/1997"], [12, "MF", "ČERV", "FC Viktoria Plzeň (CZE)", "10/04/2001"], [13, "FW", "CHYTIL", "SK Slavia Praha (CZE)", "29/04/1999"], [14, "DF", "JURÁSEK", "SK Slavia Praha (CZE)", "07/08/2000"], [15, "FW", "ŠULC", "Olympique Lyonnais (FRA)", "29/12/2000"], [16, "GK", "STANĚK", "SK Slavia Praha (CZE)", "27/04/1996"], [17, "MF", "PROVOD", "SK Slavia Praha (CZE)", "23/10/1996"], [18, "MF", "SADÍLEK", "SK Slavia Praha (CZE)", "31/05/1999"], [19, "FW", "CHORÝ", "SK Slavia Praha (CZE)", "26/01/1995"], [20, "DF", "ZELENÝ", "AC Sparta Praha (CZE)", "20/08/1992"], [21, "DF", "DOUDĚRA", "SK Slavia Praha (CZE)", "31/05/1998"], [22, "MF", "SOUČEK", "West Ham United FC (ENG)", "27/02/1995"], [23, "GK", "HORNÍČEK", "SC Braga (POR)", "13/07/2002"], [24, "MF", "SOJKA", "FC Viktoria Plzeň (CZE)", "02/04/2003"], [25, "MF", "SOCHŮREK", "AC Sparta Praha (CZE)", "07/06/2008"], [26, "FW", "VIŠINSKÝ", "FC Viktoria Plzeň (CZE)", "21/03/2003"]]}, "ECU": {"name": "Ecuador", "flag": "🇪🇨", "coach": "Sebastián Beccacece", "p": [[1, "GK", "GALINDEZ", "CA Huracán (ARG)", "30/03/1987"], [2, "DF", "TORRES", "SC Internacional (BRA)", "11/01/1997"], [3, "DF", "HINCAPIE", "Arsenal FC (ENG)", "09/01/2002"], [4, "DF", "ORDÓÑEZ", "Club Brugge (BEL)", "21/04/2004"], [5, "MF", "ALCIVAR", "Independiente Del Valle (ECU)", "05/08/1999"], [6, "DF", "PACHO", "Paris Saint-Germain (FRA)", "16/10/2001"], [7, "DF", "ESTUPIÑÁN", "AC Milan (ITA)", "21/01/1998"], [8, "MF", "A. VALENCIA", "Royal Antwerp FC (BEL)", "21/07/2003"], [9, "FW", "YEBOAH ZAMORA", "Venezia FC (ITA)", "23/06/2000"], [10, "MF", "PAEZ", "CA River Plate (ARG)", "04/05/2007"], [11, "FW", "RODRIGUEZ", "Royale Union Saint-Gilloise (BEL)", "04/03/2000"], [12, "GK", "RAMÍREZ", "AE Kifisia FC (GRE)", "09/09/2000"], [13, "FW", "E. VALENCIA", "CF Pachuca (MEX)", "04/11/1989"], [14, "MF", "MINDA", "Atlético Mineiro (BRA)", "14/05/2003"], [15, "MF", "VITE", "Pumas UNAM (MEX)", "09/03/2002"], [16, "FW", "J. CAICEDO", "CA Huracán (ARG)", "18/11/1997"], [17, "DF", "PRECIADO", "Atlético Mineiro (BRA)", "18/02/1998"], [18, "MF", "CASTILLO", "FC Midtjylland (DEN)", "24/03/2004"], [19, "FW", "PLATA", "CR Flamengo (BRA)", "01/11/2000"], [20, "FW", "ANGULO", "Sunderland AFC (ENG)", "19/06/2003"], [21, "MF", "FRANCO", "Atlético Mineiro (BRA)", "21/08/1998"], [22, "GK", "VALLE", "LDU Quito (ECU)", "28/02/1996"], [23, "MF", "M. CAICEDO", "Chelsea FC (ENG)", "02/11/2001"], [24, "FW", "AREVALO", "VfB Stuttgart (GER)", "19/03/2005"], [25, "DF", "POROZO", "Club Tijuana (MEX)", "04/08/2000"], [26, "DF", "MEDINA", "KRC Genk (BEL)", "05/11/2004"]]}, "EGY": {"name": "Egipto", "flag": "🇪🇬", "coach": "Hossam Hassan", "p": [[1, "GK", "M. ELSHENAWY", "Al Ahly FC (EGY)", "18/12/1988"], [2, "DF", "YASSER", "Al Ahly FC (EGY)", "10/02/1993"], [3, "DF", "M. HANY", "Al Ahly FC (EGY)", "02/02/1996"], [4, "DF", "HOSSAM", "Zamalek SC (EGY)", "30/04/2001"], [5, "DF", "R. RABIAA", "Al Ain FC (UAE)", "20/05/1993"], [6, "DF", "M. ABDELMONIEM", "OGC Nice (FRA)", "01/02/1999"], [7, "FW", "M. TREZEGUET", "Al Ahly FC (EGY)", "01/10/1994"], [8, "MF", "E. ASHOUR", "Al Ahly FC (EGY)", "20/02/1998"], [9, "FW", "ABDELKARIM", "FC Barcelona (ESP)", "01/01/2008"], [10, "FW", "M. SALAH", "Liverpool FC (ENG)", "15/06/1992"], [11, "MF", "ZICO", "Pyramids FC (EGY)", "27/04/1997"], [12, "FW", "H. HASSAN", "Real Oviedo (ESP)", "08/02/2002"], [13, "DF", "A. FATOUH", "Zamalek SC (EGY)", "22/03/1998"], [14, "MF", "H. FATHY", "Al Wakrah SC (QAT)", "29/09/1994"], [15, "DF", "K. HAFEZ", "Pyramids FC (EGY)", "12/03/1996"], [16, "GK", "M. SOLIMAN", "Zamalek SC (EGY)", "08/06/1987"], [17, "MF", "M. LASHIN", "Pyramids FC (EGY)", "29/05/1996"], [18, "MF", "DONGA", "Al Najmah SC (KSA)", "06/04/1996"], [19, "MF", "M. ATTIA", "Al Ahly FC (EGY)", "01/08/1998"], [20, "FW", "I. ADEL", "FC Nordsjælland (DEN)", "23/04/2001"], [21, "MF", "M. SABER", "ZED FC (EGY)", "30/07/2001"], [22, "FW", "MARMOUSH", "Manchester City FC (ENG)", "07/02/1999"], [23, "GK", "SHOUBIR", "Al Ahly FC (EGY)", "15/05/2000"], [24, "DF", "T. ALAA", "ZED FC (EGY)", "05/01/2002"], [25, "FW", "ZIZO", "Al Ahly FC (EGY)", "10/01/1996"], [26, "GK", "M. ALAA", "El Gouna FC (EGY)", "01/01/1999"]]}, "ENG": {"name": "Inglaterra", "flag": "🏴󠁧󠁢󠁥󠁮󠁧", "coach": "Thomas Tuchel", "p": [[1, "GK", "PICKFORD", "Everton FC (ENG)", "07/03/1994"], [2, "DF", "KONSA", "Aston Villa FC (ENG)", "23/10/1997"], [3, "DF", "O'REILLY", "Manchester City FC (ENG)", "21/03/2005"], [4, "MF", "RICE", "Arsenal FC (ENG)", "14/01/1999"], [5, "DF", "STONES", "Manchester City FC (ENG)", "28/05/1994"], [6, "DF", "GUEHI", "Manchester City FC (ENG)", "13/07/2000"], [7, "FW", "SAKA", "Arsenal FC (ENG)", "05/09/2001"], [8, "MF", "ANDERSON", "Nottingham Forest FC (ENG)", "06/11/2002"], [9, "FW", "KANE", "FC Bayern München (GER)", "28/07/1993"], [10, "MF", "BELLINGHAM", "Real Madrid C. F. (ESP)", "29/06/2003"], [11, "FW", "RASHFORD", "FC Barcelona (ESP)", "31/10/1997"], [12, "DF", "LIVRAMENTO", "Newcastle United FC (ENG)", "12/11/2002"], [13, "GK", "D. HENDERSON", "Crystal Palace FC (ENG)", "12/03/1997"], [14, "MF", "J. HENDERSON", "Brentford FC (ENG)", "17/06/1990"], [15, "DF", "BURN", "Newcastle United FC (ENG)", "09/05/1992"], [16, "MF", "MAINOO", "Manchester United FC (ENG)", "19/04/2005"], [17, "MF", "ROGERS", "Aston Villa FC (ENG)", "26/07/2002"], [18, "FW", "GORDON", "Newcastle United FC (ENG)", "24/02/2001"], [19, "FW", "WATKINS", "Aston Villa FC (ENG)", "30/12/1995"], [20, "FW", "MADUEKE", "Arsenal FC (ENG)", "10/03/2002"], [21, "MF", "EZE", "Arsenal FC (ENG)", "29/06/1998"], [22, "FW", "TONEY", "Al Ahli FC (KSA)", "16/03/1996"], [23, "GK", "TRAFFORD", "Manchester City FC (ENG)", "10/10/2002"], [24, "DF", "JAMES", "Chelsea FC (ENG)", "08/12/1999"], [25, "DF", "SPENCE", "Tottenham Hotspur FC (ENG)", "09/08/2000"], [26, "DF", "QUANSAH", "Bayer Leverkusen (GER)", "29/01/2003"]]}, "FRA": {"name": "Francia", "flag": "🇫🇷", "coach": "Didier Deschamps", "p": [[1, "GK", "SAMBA", "Stade Rennais FC (FRA)", "25/04/1994"], [2, "DF", "GUSTO", "Chelsea FC (ENG)", "19/05/2003"], [3, "DF", "DIGNE", "Aston Villa FC (ENG)", "20/07/1993"], [4, "DF", "UPAMECANO", "FC Bayern München (GER)", "27/10/1998"], [5, "DF", "KOUNDE", "FC Barcelona (ESP)", "12/11/1998"], [6, "MF", "KONE", "AS Roma (ITA)", "17/05/2001"], [7, "FW", "DEMBELE", "Paris Saint-Germain (FRA)", "15/05/1997"], [8, "MF", "TCHOUAMENI", "Real Madrid C. F. (ESP)", "27/01/2000"], [9, "FW", "THURAM", "FC Internazionale Milano (ITA)", "06/08/1997"], [10, "FW", "MBAPPE", "Real Madrid C. F. (ESP)", "20/12/1998"], [11, "FW", "OLISE", "FC Bayern München (GER)", "12/12/2001"], [12, "FW", "BARCOLA", "Paris Saint-Germain (FRA)", "02/09/2002"], [13, "MF", "KANTE", "Fenerbahçe SK (TUR)", "29/03/1991"], [14, "MF", "RABIOT", "AC Milan (ITA)", "03/04/1995"], [15, "DF", "KONATE", "Liverpool FC (ENG)", "25/05/1999"], [16, "GK", "MAIGNAN", "AC Milan (ITA)", "03/07/1995"], [17, "DF", "SALIBA", "Arsenal FC (ENG)", "24/03/2001"], [18, "MF", "ZAIRE EMERY", "Paris Saint-Germain (FRA)", "08/03/2006"], [19, "DF", "T. HERNANDEZ", "Al Hilal SC (KSA)", "06/10/1997"], [20, "FW", "DOUE", "Paris Saint-Germain (FRA)", "03/06/2005"], [21, "DF", "L. HERNANDEZ", "Paris Saint-Germain (FRA)", "14/02/1996"], [22, "FW", "MATETA", "Crystal Palace FC (ENG)", "28/06/1997"], [23, "GK", "RISSER", "RC Lens (FRA)", "02/12/2004"], [24, "MF", "CHERKI", "Manchester City FC (ENG)", "17/08/2003"], [25, "MF", "AKLIOUCHE", "AS Monaco (FRA)", "25/02/2002"], [26, "DF", "LACROIX", "Crystal Palace FC (ENG)", "06/04/2000"]]}, "GER": {"name": "Alemania", "flag": "🇩🇪", "coach": "Julian Nagelsmann", "p": [[1, "GK", "NEUER", "FC Bayern München (GER)", "27/03/1986"], [2, "DF", "RÜDIGER", "Real Madrid C. F. (ESP)", "03/03/1993"], [3, "DF", "ANTON", "Borussia Dortmund (GER)", "20/07/1996"], [4, "DF", "TAH", "FC Bayern München (GER)", "11/02/1996"], [5, "MF", "PAVLOVIĆ", "FC Bayern München (GER)", "03/05/2004"], [6, "DF", "KIMMICH", "FC Bayern München (GER)", "08/02/1995"], [7, "FW", "HAVERTZ", "Arsenal FC (ENG)", "11/06/1999"], [8, "MF", "GORETZKA", "FC Bayern München (GER)", "06/02/1995"], [9, "MF", "LEWELING", "VfB Stuttgart (GER)", "26/02/2001"], [10, "MF", "MUSIALA", "FC Bayern München (GER)", "26/02/2003"], [11, "FW", "WOLTEMADE", "Newcastle United FC (ENG)", "14/02/2002"], [12, "GK", "BAUMANN", "TSG Hoffenheim (GER)", "02/06/1990"], [13, "MF", "GROß", "Brighton & Hove Albion FC (ENG)", "15/06/1991"], [14, "FW", "BEIER", "Borussia Dortmund (GER)", "17/10/2002"], [15, "DF", "SCHLOTTERBECK", "Borussia Dortmund (GER)", "01/12/1999"], [16, "MF", "STILLER", "VfB Stuttgart (GER)", "04/04/2001"], [17, "MF", "WIRTZ", "Liverpool FC (ENG)", "03/05/2003"], [18, "DF", "BROWN", "Eintracht Frankfurt (GER)", "16/06/2003"], [19, "MF", "SANÉ", "Galatasaray SK (TUR)", "11/01/1996"], [20, "MF", "AMIRI", "1. FSV Mainz 05 (GER)", "27/10/1996"], [21, "GK", "NÜBEL", "VfB Stuttgart (GER)", "30/09/1996"], [22, "DF", "RAUM", "RB Leipzig (GER)", "22/04/1998"], [23, "MF", "NMECHA", "Borussia Dortmund (GER)", "10/10/2000"], [24, "DF", "THIAW", "Newcastle United FC (ENG)", "08/08/2001"], [25, "MF", "KARL", "FC Bayern München (GER)", "22/02/2008"], [26, "FW", "UNDAV", "VfB Stuttgart (GER)", "19/07/1996"]]}, "GHA": {"name": "Ghana", "flag": "🇬🇭", "coach": "Carlos Queiroz", "p": [[1, "GK", "ZIGI", "FC St. Gallen (SUI)", "29/11/1996"], [2, "DF", "SEIDU", "Stade Rennais FC (FRA)", "04/06/2000"], [3, "MF", "CALEB", "FC Nordsjælland (DEN)", "15/01/2006"], [4, "DF", "ADJETEY", "VfL Wolfsburg (GER)", "13/12/2003"], [5, "MF", "THOMAS", "Villarreal CF (ESP)", "13/06/1993"], [6, "DF", "SULEMAN", "Rayo Vallecano (ESP)", "06/06/1998"], [7, "FW", "FATAWU", "Leicester City FC (ENG)", "08/03/2004"], [8, "MF", "SIBO", "Real Oviedo (ESP)", "24/06/1998"], [9, "FW", "AYEW", "Leicester City FC (ENG)", "11/09/1991"], [10, "FW", "ASANTE", "Coventry City FC (ENG)", "29/12/1998"], [11, "MF", "SEMENYO", "Manchester City FC (ENG)", "07/01/2000"], [12, "GK", "ANANG", "St Patrick's Athletic FC (IRL)", "08/06/2000"], [13, "FW", "BAAH", "Al Qadsiah FC (KSA)", "14/12/2004"], [14, "DF", "MENSAH", "AJ Auxerre (FRA)", "18/07/1998"], [15, "MF", "OWUSU", "AJ Auxerre (FRA)", "07/11/1997"], [16, "GK", "ASARE", "Hearts Of Oak SC (GHA)", "13/07/1992"], [17, "DF", "BABA", "PAOK Saloniki (GRE)", "02/07/1994"], [18, "DF", "OPOKU", "Başakşehir FK (TUR)", "14/10/1998"], [19, "FW", "WILLIAMS", "Athletic Club (ESP)", "15/06/1994"], [20, "MF", "BOAKYE", "AS Saint-Etienne (FRA)", "03/11/2000"], [21, "DF", "PEPRAH", "OGC Nice (FRA)", "04/06/2004"], [22, "FW", "KAMALDEEN", "Atalanta Bergamo (ITA)", "15/02/2002"], [23, "DF", "LUCKASSEN", "Pafos FC (CYP)", "03/07/1995"], [24, "FW", "NUAMAH", "Olympique Lyonnais (FRA)", "01/11/2003"], [25, "FW", "ADU", "FC Viktoria Plzeň (CZE)", "23/09/2003"], [26, "DF", "SENEYA", "AJ Auxerre (FRA)", "28/01/2001"]]}, "HAI": {"name": "Haití", "flag": "🇭🇹", "coach": "Sébastien Migné", "p": [[1, "GK", "PLACIDE", "SC Bastia (FRA)", "29/01/1988"], [2, "DF", "ARCUS", "Angers SCO (FRA)", "28/06/1996"], [3, "DF", "THERMONCY", "BSC Young Boys (SUI)", "29/03/2006"], [4, "DF", "ADE", "LDU Quito (ECU)", "21/05/1990"], [5, "DF", "DELCROIX", "FC Lugano (SUI)", "28/02/1999"], [6, "MF", "SAINTE", "El Paso Locomotive FC (USA)", "09/08/2002"], [7, "FW", "ETIENNE JR", "Toronto FC (CAN)", "25/11/1996"], [8, "DF", "EXPERIENCE", "AS Nancy (FRA)", "09/03/1999"], [9, "FW", "NAZON", "Esteghlal Tehran FC (IRN)", "07/04/1994"], [10, "MF", "BELLEGARDE", "Wolverhampton Wanderers FC (ENG)", "27/06/1998"], [11, "FW", "DEEDSON", "FC Dallas (USA)", "11/02/2001"], [12, "GK", "A. PIERRE", "FC Sochaux-Montbéliard (FRA)", "25/02/2001"], [13, "DF", "LACROIX", "Colorado Springs Switchbacks FC (USA)", "14/10/1993"], [14, "MF", "L. PIERRE", "FC Vizela (POR)", "09/03/1998"], [15, "FW", "PROVIDENCE", "Almere City FC (NED)", "07/07/2001"], [16, "FW", "JOSEPH", "Ferencvárosi TC (HUN)", "12/10/2000"], [17, "MF", "JEAN JACQUES", "Philadelphia Union (USA)", "20/05/2000"], [18, "FW", "ISIDOR", "Sunderland AFC (ENG)", "27/08/2000"], [19, "FW", "FORTUNE", "FC Vizela (POR)", "30/01/1999"], [20, "FW", "PIERROT", "Çaykur Rizespor (TUR)", "29/03/1995"], [21, "FW", "CASIMIR", "AJ Auxerre (FRA)", "24/09/2001"], [22, "DF", "DUVERNE", "KAA Gent (BEL)", "12/07/1997"], [23, "GK", "DUVERGER", "FC Cosmos Koblenz (GER)", "27/04/2000"], [24, "DF", "PAUGIN", "SV Zulte Waregem (BEL)", "24/08/2001"], [25, "MF", "SIMON", "FC Tatran Prešov (SVK)", "29/07/2000"], [26, "MF", "W. PIERRE", "Violette AC (HAI)", "30/12/2004"]]}, "IRN": {"name": "Irán", "flag": "🇮🇷", "coach": "Amir Ghalehnoy", "p": [[1, "GK", "BEIRANVAND", "Tractor Sazi Tabriz FC (IRN)", "21/09/1992"], [2, "DF", "SALEH", "Esteghlal Tehran FC (IRN)", "26/12/1998"], [3, "DF", "E. HAJISAFI", "Sepahan SC (IRN)", "25/02/1990"], [4, "DF", "SHOJA", "Tractor Sazi Tabriz FC (IRN)", "14/05/1989"], [5, "DF", "M. MOHAMMADI", "Persepolis FC (IRN)", "29/09/1993"], [6, "MF", "S. EZATOLAHI", "Shabab Al Ahli Club (UAE)", "01/10/1996"], [7, "MF", "A. JAHANBAKHSH", "FCV Dender EH (BEL)", "11/08/1993"], [8, "MF", "M. MOHEBBI", "FC Rostov (RUS)", "20/12/1998"], [9, "FW", "TAREMI", "Olympiacos FC (GRE)", "18/07/1992"], [10, "FW", "MEHDI GHAYEDI", "Al Nasr SC (UAE)", "05/12/1998"], [11, "FW", "A. ALIPOUR", "Persepolis FC (IRN)", "11/11/1995"], [12, "GK", "PAYAM", "Persepolis FC (IRN)", "06/04/1995"], [13, "DF", "KANANI", "Persepolis FC (IRN)", "23/03/1994"], [14, "MF", "GHODDOS", "Al Ittihad Kalba SCC (UAE)", "06/09/1993"], [15, "MF", "ROOZBEH", "Esteghlal Tehran FC (IRN)", "24/07/1993"], [16, "MF", "M. TORABI", "Tractor Sazi Tabriz FC (IRN)", "10/09/1994"], [17, "DF", "ARYA", "Sepahan SC (IRN)", "22/04/2002"], [18, "FW", "AMIRHOSSEIN", "Tractor Sazi Tabriz FC (IRN)", "30/10/2000"], [19, "DF", "ALI", "Foolad Khuzestan FC (IRN)", "08/02/1996"], [20, "FW", "SHAHRIYAR", "Al Ittihad Kalba SCC (UAE)", "21/12/1994"], [21, "MF", "MOHAMMAD", "Al Wahda SC (UAE)", "07/10/2001"], [22, "GK", "HOSSEINI", "Sepahan SC (IRN)", "30/06/1992"], [23, "DF", "RAMIN", "Foolad Khuzestan FC (IRN)", "21/03/1990"], [24, "FW", "DARGAHI", "Standard Liège (BEL)", "09/01/1997"], [25, "DF", "DANIAL", "Malavan Anzali FC (IRN)", "26/10/2003"], [26, "MF", "RAZAGH", "Esteghlal Tehran FC (IRN)", "11/04/2006"]]}, "IRQ": {"name": "Irak", "flag": "🇮🇶", "coach": "Graham Arnold", "p": [[1, "GK", "FAHAD", "Al Talaba SC (IRQ)", "21/10/1994"], [2, "DF", "REBIN", "Port FC (THA)", "12/04/1992"], [3, "DF", "HUSSEIN", "Pogoń Szczecin (POL)", "01/03/2002"], [4, "DF", "ZAID T.", "Pakhtakor Tashkent FK (UZB)", "29/01/2001"], [5, "DF", "AKAM", "Al Zawra'a SC (IRQ)", "16/08/1998"], [6, "DF", "MUNAF", "Al Shorta SC (IRQ)", "16/11/1996"], [7, "MF", "YOUSSEF", "AEK Larnaca FC (CYP)", "21/08/2003"], [8, "MF", "IBRAHIM", "Al Dhafra SCC (UAE)", "01/05/2000"], [9, "FW", "AL-HAMADI", "Luton Town FC (ENG)", "01/03/2002"], [10, "FW", "MOHANAD", "Dibba FC (UAE)", "20/06/2000"], [11, "FW", "AHMED Q.", "Nashville SC (USA)", "12/07/2003"], [12, "GK", "JALAL", "Al Zawra'a SC (IRQ)", "18/05/1991"], [13, "FW", "ALI Y.", "Al Talaba SC (IRQ)", "19/01/1996"], [14, "MF", "Z.IQBAL", "FC Utrecht (NED)", "27/04/2003"], [15, "DF", "AHMED", "Al Shorta SC (IRQ)", "01/07/1995"], [16, "MF", "AL-AMMARI", "KS Cracovia (POL)", "27/07/1997"], [17, "FW", "ALI J.", "Al Najmah SC (KSA)", "20/01/2004"], [18, "FW", "AYMEN", "Al Karma SC (IRQ)", "22/03/1996"], [19, "MF", "K. YAKOB", "Aarhus GF (DEN)", "10/10/2000"], [20, "MF", "AIMAR", "Sarpsborg 08 FF (NOR)", "20/12/2002"], [21, "FW", "MARKO", "Venezia FC (ITA)", "16/03/2004"], [22, "GK", "AHMED B.", "Al Shorta SC (IRQ)", "19/08/1996"], [23, "DF", "DOSKI", "FC Viktoria Plzeň (CZE)", "07/12/1999"], [24, "MF", "ZAID I.", "Al Talaba SC (IRQ)", "03/01/2002"], [25, "DF", "MUSTAFA", "Al Shorta SC (IRQ)", "25/05/2001"], [26, "DF", "FRANS", "Persib Bandung (IDN)", "14/07/1993"]]}, "JPN": {"name": "Japón", "flag": "🇯🇵", "coach": "Hajime Moriyasu", "p": [[1, "GK", "Z. SUZUKI", "Parma (ITA)", "21/08/2002"], [2, "DF", "SUGAWARA", "SV Werder Bremen (GER)", "28/06/2000"], [3, "DF", "TANIGUCHI", "Sint-Truiden VV (BEL)", "15/07/1991"], [4, "DF", "ITAKURA", "AFC Ajax (NED)", "27/01/1997"], [5, "DF", "NAGATOMO", "FC Tokyo (JPN)", "12/09/1986"], [6, "MF", "ENDO", "Liverpool FC (ENG)", "09/02/1993"], [7, "MF", "TANAKA", "Leeds United FC (ENG)", "10/09/1998"], [8, "MF", "KUBO", "Real Sociedad (ESP)", "04/06/2001"], [9, "FW", "GOTO", "Sint-Truiden VV (BEL)", "03/06/2005"], [10, "MF", "DOAN", "Eintracht Frankfurt (GER)", "16/06/1998"], [11, "MF", "MAEDA", "Celtic FC (SCO)", "20/10/1997"], [12, "GK", "OSAKO", "Sanfrecce Hiroshima (JPN)", "28/07/1999"], [13, "MF", "NAKAMURA", "Stade Reims (FRA)", "28/07/2000"], [14, "MF", "J. ITO", "KRC Genk (BEL)", "09/03/1993"], [15, "MF", "KAMADA", "Crystal Palace FC (ENG)", "05/08/1996"], [16, "DF", "WATANABE", "Feyenoord Rotterdam (NED)", "05/02/1997"], [17, "MF", "Y. SUZUKI", "SC Freiburg (GER)", "25/10/2001"], [18, "FW", "AYASE", "Feyenoord Rotterdam (NED)", "28/08/1998"], [19, "FW", "OGAWA", "NEC Nijmegen (NED)", "08/08/1997"], [20, "DF", "SEKO", "Le Havre AC (FRA)", "07/06/2000"], [21, "DF", "H. ITO", "FC Bayern München (GER)", "12/05/1999"], [22, "DF", "TOMIYASU", "AFC Ajax (NED)", "05/11/1998"], [23, "GK", "HAYAKAWA", "Kashima Antlers (JPN)", "03/03/1999"], [24, "MF", "SANO", "1. FSV Mainz 05 (GER)", "30/12/2000"], [25, "DF", "J. SUZUKI", "FC København (DEN)", "12/07/2003"], [26, "FW", "SHIOGAI", "VfL Wolfsburg (GER)", "26/03/2005"]]}, "JOR": {"name": "Jordania", "flag": "🇯🇴", "coach": "Jamal Sellami", "p": [[1, "GK", "YAZEED", "Al Hussein SC (JOR)", "08/01/1993"], [2, "DF", "ABU HASHEESH", "Al Karma SC (IRQ)", "09/05/1995"], [3, "DF", "NASIB", "Al Zawra'a SC (IRQ)", "25/02/1994"], [4, "DF", "ABU DAHAB", "Al Faisaly SC (JOR)", "13/05/2000"], [5, "DF", "ALARAB", "FC Seoul (KOR)", "31/01/1996"], [6, "MF", "JAMOUS", "Al Zawra'a SC (IRQ)", "03/07/2002"], [7, "FW", "ABU ZRAIQ", "Raja Casablanca (MAR)", "30/12/1997"], [8, "MF", "ALRAWABDEH", "Selangor FC (MAS)", "24/02/1997"], [9, "FW", "OLWAN", "Al Sailiya SC (QAT)", "26/03/2000"], [10, "FW", "ALTAMARI", "Stade Rennais FC (FRA)", "10/06/1997"], [11, "FW", "ODEH", "Pyramids FC (EGY)", "22/11/2005"], [12, "GK", "BANI ATEYAH", "Al Faisaly SC (JOR)", "25/01/1993"], [13, "FW", "ALMARDI", "Al Hussein SC (JOR)", "06/10/1993"], [14, "MF", "RAJA'EI", "Al Hussein SC (JOR)", "25/07/1993"], [15, "MF", "SA'DEH", "Al Karma SC (IRQ)", "27/04/2000"], [16, "DF", "ABU ALNADI", "Selangor FC (MAS)", "08/02/2001"], [17, "DF", "SALEEM", "Al Hussein SC (JOR)", "17/01/1992"], [18, "FW", "SABRA", "NK Lokomotiva Zagreb (CRO)", "01/02/2006"], [19, "DF", "SA'ED", "Al Hussein SC (JOR)", "01/02/1997"], [20, "MF", "ABU TAHA", "Al-Quwa Al-Jawiya (IRQ)", "02/02/2003"], [21, "MF", "NIZAR", "Qatar SC (QAT)", "23/03/1999"], [22, "GK", "ALFAKHORI", "Al Wahdat SC (JOR)", "22/01/2000"], [23, "DF", "EHSAN", "Al Hussein SC (JOR)", "05/02/1994"], [24, "FW", "AZAIZEH", "Al Shabab FC (KSA)", "13/04/2004"], [25, "MF", "ALDAOUD", "Al Wahdat SC (JOR)", "12/04/1992"], [26, "DF", "BADAWI", "Al Faisaly SC (JOR)", "13/09/1997"]]}, "KOR": {"name": "Corea del Sur", "flag": "🇰🇷", "coach": "Hong Myungbo", "p": [[1, "GK", "SEUNGGYU", "FC Tokyo (JPN)", "30/09/1990"], [2, "DF", "HANBEOM", "FC Midtjylland (DEN)", "17/06/2002"], [3, "MF", "GIHYUK", "Gangwon FC (KOR)", "07/07/2000"], [4, "DF", "MINJAE", "FC Bayern München (GER)", "15/11/1996"], [5, "DF", "TAEHYEON", "Kashima Antlers (JPN)", "17/09/2000"], [6, "MF", "INBEOM", "Feyenoord Rotterdam (NED)", "20/09/1996"], [7, "FW", "HEUNGMIN", "LAFC (USA)", "08/07/1992"], [8, "MF", "SEUNGHO", "Birmingham City FC (ENG)", "17/03/1997"], [9, "FW", "GUESUNG", "FC Midtjylland (DEN)", "25/01/1998"], [10, "MF", "JAESUNG", "1. FSV Mainz 05 (GER)", "10/08/1992"], [11, "MF", "HEECHAN", "Wolverhampton Wanderers FC (ENG)", "26/01/1996"], [12, "GK", "BUMKEUN", "Jeonbuk Hyundai Motors FC (KOR)", "15/10/1997"], [13, "DF", "TAESEOK", "FK Austria Wien (AUT)", "28/07/2002"], [14, "DF", "WIJE", "Jeonbuk Hyundai Motors FC (KOR)", "25/08/2001"], [15, "DF", "MOONHWAN", "Daejeon Hana Citizen FC (KOR)", "01/08/1995"], [16, "DF", "JINSEOB", "Zhejiang FC (CHN)", "23/10/1995"], [17, "MF", "JUNHO", "Stoke City FC (ENG)", "21/08/2003"], [18, "FW", "HYEONGYU", "Beşiktaş JK (TUR)", "12/04/2001"], [19, "MF", "KANGIN", "Paris Saint-Germain (FRA)", "19/02/2001"], [20, "MF", "HYUNJUN", "Celtic FC (SCO)", "25/05/2002"], [21, "GK", "HYEONWOO", "Ulsan HD (KOR)", "25/09/1991"], [22, "DF", "YOUNGWOO", "FK Crvena Zvezda (SRB)", "05/12/1998"], [23, "DF", "JENS", "Borussia Mönchengladbach (GER)", "29/07/2003"], [24, "MF", "JINGYU", "Jeonbuk Hyundai Motors FC (KOR)", "24/02/1997"], [25, "MF", "JISUNG", "Swansea City AFC (WAL)", "09/05/2002"], [26, "MF", "DONGGYEONG", "Ulsan HD (KOR)", "20/09/1997"]]}, "MEX": {"name": "México", "flag": "🇲🇽", "coach": "Javier Aguirre", "p": [[1, "GK", "R. RANGEL", "CD Guadalajara (MEX)", "25/02/2000"], [2, "DF", "J. SÁNCHEZ", "PAOK Saloniki (GRE)", "10/12/1997"], [3, "DF", "C. MONTES", "FC Lokomotiv Moscow (RUS)", "24/02/1997"], [4, "DF", "E. ÁLVAREZ", "Fenerbahçe SK (TUR)", "24/10/1997"], [5, "DF", "J. VÁSQUEZ", "Genoa CFC (ITA)", "22/10/1998"], [6, "MF", "E. LIRA", "CF Cruz Azul (MEX)", "08/05/2000"], [7, "MF", "L. ROMO", "CD Guadalajara (MEX)", "05/06/1995"], [8, "MF", "FIDALGO", "Real Betis (ESP)", "09/04/1997"], [9, "FW", "RAÚL", "Fulham FC (ENG)", "05/05/1991"], [10, "FW", "A. VEGA", "Deportivo Toluca FC (MEX)", "25/11/1997"], [11, "FW", "S. GIMENEZ", "AC Milan (ITA)", "18/04/2001"], [12, "GK", "C. ACEVEDO", "Club Santos Laguna (MEX)", "19/04/1996"], [13, "GK", "G. OCHOA", "AEL Limassol (CYP)", "13/07/1985"], [14, "FW", "A. GONZÁLEZ", "CD Guadalajara (MEX)", "20/04/2003"], [15, "DF", "I. REYES", "Club América (MEX)", "23/05/2000"], [16, "FW", "J. QUIÑONES", "Al Qadsiah FC (KSA)", "24/03/1997"], [17, "MF", "ORBELÍN", "AEK Athens (GRE)", "24/03/1996"], [18, "MF", "O. VARGAS", "Atlético De Madrid (ESP)", "05/08/2005"], [19, "MF", "G. MORA", "Club Tijuana (MEX)", "14/10/2008"], [20, "DF", "M. CHÁVEZ", "AZ Alkmaar (NED)", "12/05/2004"], [21, "FW", "C. HUERTA", "RSC Anderlecht (BEL)", "03/12/2000"], [22, "FW", "G. MARTÍNEZ", "Pumas UNAM (MEX)", "15/03/1995"], [23, "DF", "J. GALLARDO", "Deportivo Toluca FC (MEX)", "15/08/1994"], [24, "MF", "L. CHÁVEZ", "FC Dynamo Moscow (RUS)", "15/01/1996"], [25, "FW", "R. ALVARADO", "CD Guadalajara (MEX)", "07/09/1998"], [26, "MF", "B. GUTIÉRREZ", "CD Guadalajara (MEX)", "17/06/2003"]]}, "MAR": {"name": "Marruecos", "flag": "🇲🇦", "coach": "Mohamed Ouahbi", "p": [[1, "GK", "BONO", "Al Hilal SC (KSA)", "05/04/1991"], [2, "DF", "HAKIMI", "Paris Saint-Germain (FRA)", "04/11/1998"], [3, "DF", "MAZRAOUI", "Manchester United FC (ENG)", "14/11/1997"], [4, "MF", "AMRABAT", "Real Betis (ESP)", "21/08/1996"], [5, "DF", "AGUERD", "Olympique Marseille (FRA)", "30/03/1996"], [6, "MF", "BOUADDI", "Lille OSC (FRA)", "02/10/2007"], [7, "MF", "TALBI", "Sunderland AFC (ENG)", "09/05/2005"], [8, "MF", "OUNAHI", "Girona FC (ESP)", "19/04/2000"], [9, "FW", "RAHIMI", "Al Ain FC (UAE)", "02/06/1996"], [10, "FW", "BRAHIM", "Real Madrid C. F. (ESP)", "03/08/1999"], [11, "MF", "SAIBARI", "PSV Eindhoven (NED)", "28/01/2001"], [12, "GK", "EL KAJOUI", "RS Berkane (MAR)", "10/05/1989"], [13, "DF", "EL OUAHDI", "KRC Genk (BEL)", "31/12/2001"], [14, "DF", "ISSA", "Fulham FC (ENG)", "09/01/1997"], [15, "MF", "EL MOURABET", "RC Strasbourg (FRA)", "06/10/2005"], [16, "MF", "YASSINE", "RC Strasbourg (FRA)", "22/11/2005"], [17, "FW", "EZZALZOULI", "Real Betis (ESP)", "17/12/2001"], [18, "DF", "RIAD", "Crystal Palace FC (ENG)", "17/06/2003"], [19, "DF", "BELAMMARI", "Al Ahly FC (EGY)", "20/09/1998"], [20, "FW", "EL KAABI", "Olympiacos FC (GRE)", "25/06/1993"], [21, "FW", "AMAIMOUNI", "Eintracht Frankfurt (GER)", "30/11/2004"], [22, "GK", "TAGNAOUTI", "ASFAR (MAR)", "05/04/1996"], [23, "MF", "EL KHANNOUSS", "VfB Stuttgart (GER)", "10/05/2004"], [24, "MF", "EL AYNAOUI", "AS Roma (ITA)", "02/07/2001"], [25, "DF", "HALHAL", "KV Mechelen (BEL)", "05/03/2003"], [26, "DF", "SALAH-EDDINE", "PSV Eindhoven (NED)", "18/01/2002"]]}, "NED": {"name": "Países Bajos", "flag": "🇳🇱", "coach": "Ronald Koeman", "p": [[1, "GK", "VERBRUGGEN", "Brighton & Hove Albion FC (ENG)", "18/08/2002"], [2, "DF", "J. TIMBER", "Arsenal FC (ENG)", "17/06/2001"], [3, "MF", "DE ROON", "Atalanta Bergamo (ITA)", "29/03/1991"], [4, "DF", "VIRGIL", "Liverpool FC (ENG)", "08/07/1991"], [5, "DF", "AKÉ", "Manchester City FC (ENG)", "18/02/1995"], [6, "DF", "VAN HECKE", "Brighton & Hove Albion FC (ENG)", "08/06/2000"], [7, "MF", "KLUIVERT", "AFC Bournemouth (ENG)", "05/05/1999"], [8, "MF", "GRAVENBERCH", "Liverpool FC (ENG)", "16/05/2002"], [9, "FW", "WEGHORST", "AFC Ajax (NED)", "07/08/1992"], [10, "FW", "MEMPHIS", "SC Corinthians (BRA)", "13/02/1994"], [11, "FW", "GAKPO", "Liverpool FC (ENG)", "07/05/1999"], [12, "DF", "WIEFFER", "Brighton & Hove Albion FC (ENG)", "16/11/1999"], [13, "GK", "ROEFS", "Sunderland AFC (ENG)", "17/01/2003"], [14, "MF", "REIJNDERS", "Manchester City FC (ENG)", "29/07/1998"], [15, "DF", "VAN DE VEN", "Tottenham Hotspur FC (ENG)", "19/04/2001"], [16, "MF", "TIL", "PSV Eindhoven (NED)", "22/12/1997"], [17, "FW", "LANG", "Galatasaray SK (TUR)", "17/06/1999"], [18, "FW", "MALEN", "AS Roma (ITA)", "19/01/1999"], [19, "FW", "BROBBEY", "Sunderland AFC (ENG)", "01/02/2002"], [20, "MF", "KOOPMEINERS", "Juventus FC (ITA)", "28/02/1998"], [21, "MF", "F. DE JONG", "FC Barcelona (ESP)", "12/05/1997"], [22, "DF", "DUMFRIES", "FC Internazionale Milano (ITA)", "18/04/1996"], [23, "GK", "FLEKKEN", "Bayer Leverkusen (GER)", "13/06/1993"], [24, "FW", "SUMMERVILLE", "West Ham United FC (ENG)", "30/10/2001"], [25, "DF", "HATO", "Chelsea FC (ENG)", "07/03/2006"], [26, "MF", "Q. TIMBER", "Olympique Marseille (FRA)", "17/06/2001"]]}, "NZL": {"name": "Nueva Zelanda", "flag": "🇳🇿", "coach": "Darren Bazeley", "p": [[1, "GK", "CROCOMBE", "Millwall FC (ENG)", "12/08/1993"], [2, "DF", "PAYNE", "Wellington Phoenix FC (NZL)", "10/01/1994"], [3, "DF", "DE VRIES", "Auckland FC (NZL)", "28/11/1994"], [4, "DF", "BINDON", "Sheffield United FC (ENG)", "27/01/2005"], [5, "DF", "BOXALL", "Minnesota United FC (USA)", "18/08/1988"], [6, "MF", "BELL", "Viking Stavanger (NOR)", "27/04/1999"], [7, "MF", "GARBETT", "Peterborough United FC (ENG)", "13/04/2002"], [8, "MF", "STAMENIC", "Swansea City AFC (WAL)", "19/02/2002"], [9, "FW", "WOOD", "Nottingham Forest FC (ENG)", "07/12/1991"], [10, "MF", "SINGH", "Wellington Phoenix FC (NZL)", "20/02/1999"], [11, "MF", "JUST", "Motherwell FC (SCO)", "01/05/2000"], [12, "GK", "PAULSEN", "Lechia Gdańsk (POL)", "04/07/2002"], [13, "DF", "CACACE", "Wrexham AFC (WAL)", "27/09/2000"], [14, "MF", "RUFER", "Wellington Phoenix FC (NZL)", "12/06/1996"], [15, "DF", "PIJNAKER", "Auckland FC (NZL)", "25/02/1999"], [16, "DF", "SURMAN", "Portland Timbers (USA)", "23/09/2003"], [17, "FW", "BARBAROUSES", "WS Wanderers FC (AUS)", "19/02/1990"], [18, "FW", "WAINE", "Port Vale FC (ENG)", "11/06/2001"], [19, "MF", "OLD", "AS Saint-Etienne (FRA)", "13/08/2002"], [20, "MF", "MCCOWATT", "Silkeborg IF (DEN)", "30/04/1999"], [21, "FW", "RANDALL", "Auckland FC (NZL)", "19/08/2002"], [22, "GK", "WOUD", "Auckland FC (NZL)", "16/01/1999"], [23, "MF", "THOMAS", "PEC Zwolle (NED)", "20/12/1994"], [24, "DF", "ELLIOT", "Auckland FC (NZL)", "07/07/1999"], [25, "MF", "BAYLISS", "Newcastle United Jets FC (AUS)", "24/07/2002"], [26, "DF", "SMITH", "Braintree Town FC (ENG)", "31/03/1990"]]}, "NOR": {"name": "Noruega", "flag": "🇳🇴", "coach": "Ståle Solbakken", "p": [[1, "GK", "NYLAND", "Sevilla FC (ESP)", "10/09/1990"], [2, "MF", "THORSBY", "US Cremonese (ITA)", "05/05/1996"], [3, "DF", "VASSBAKK AJER", "Brentford FC (ENG)", "17/04/1998"], [4, "DF", "ØSTIGÅRD", "Genoa CFC (ITA)", "28/11/1999"], [5, "DF", "MØLLER WOLFE", "Wolverhampton Wanderers FC (ENG)", "23/04/2002"], [6, "MF", "BERG", "FK Bodø/Glimt (NOR)", "24/11/1997"], [7, "FW", "SØRLOTH", "Atlético De Madrid (ESP)", "05/12/1995"], [8, "MF", "BERGE", "Fulham FC (ENG)", "14/02/1998"], [9, "FW", "BRAUT HAALAND", "Manchester City FC (ENG)", "21/07/2000"], [10, "MF", "ØDEGAARD", "Arsenal FC (ENG)", "17/12/1998"], [11, "FW", "STRAND LARSEN", "Crystal Palace FC (ENG)", "06/02/2000"], [12, "GK", "TANGVIK", "Hamburger SV (GER)", "29/11/2002"], [13, "GK", "SELVIK", "Watford FC (ENG)", "30/07/1997"], [14, "MF", "AURSNES", "SL Benfica (POR)", "10/12/1995"], [15, "DF", "BJØRKAN", "FK Bodø/Glimt (NOR)", "21/08/1998"], [16, "DF", "HOLMGREN", "Torino FC (ITA)", "16/07/2000"], [17, "DF", "HEGGEM", "Bologna FC (ITA)", "12/01/1999"], [18, "MF", "THORSTVEDT", "US Sassuolo (ITA)", "13/03/1999"], [19, "MF", "AASGAARD", "Rangers FC (SCO)", "02/05/2002"], [20, "FW", "NUSA", "RB Leipzig (GER)", "17/04/2005"], [21, "MF", "SCHJELDERUP", "SL Benfica (POR)", "01/06/2004"], [22, "MF", "BOBB", "Fulham FC (ENG)", "12/07/2003"], [23, "MF", "HAUGE", "FK Bodø/Glimt (NOR)", "12/10/1999"], [24, "DF", "LANGÅS", "Derby County FC (ENG)", "02/02/2001"], [25, "DF", "FALCHENER", "Viking Stavanger (NOR)", "08/05/2003"], [26, "FW", "RYERSON", "Borussia Dortmund (GER)", "17/11/1997"]]}, "PAN": {"name": "Panamá", "flag": "🇵🇦", "coach": "Thomas Christiansen", "p": [[1, "GK", "MEJÍA", "Club Nacional (URU)", "16/03/1991"], [2, "DF", "BLACKMAN", "ŠK Slovan Bratislava (SVK)", "02/04/1998"], [3, "DF", "CORDOBA", "Norwich City FC (ENG)", "03/06/2001"], [4, "DF", "F. ESCOBAR", "Deportivo Saprissa (CRC)", "09/01/1995"], [5, "DF", "FARIÑA", "FC Pari Nizhny Novgorod (RUS)", "19/10/2001"], [6, "MF", "MARTÍNEZ", "Hapoel Kiryat Shmona FC (ISR)", "06/02/1997"], [7, "MF", "J.L. RODRÍGUEZ", "FC Juárez (MEX)", "19/06/1998"], [8, "MF", "CARRASQUILLA", "Pumas UNAM (MEX)", "28/11/1998"], [9, "FW", "T. RODRÍGUEZ", "Deportivo Saprissa (CRC)", "09/03/1999"], [10, "MF", "ISMAEL", "Club León (MEX)", "12/05/1997"], [11, "MF", "BÁRCENAS", "Mazatlán FC (MEX)", "23/10/1993"], [12, "GK", "SAMUDIO", "CD Marathón (HON)", "23/02/1994"], [13, "DF", "RAMOS", "Puerto Cabello CF (VEN)", "26/01/1997"], [14, "DF", "HARVEY", "Minnesota United FC (USA)", "03/02/2000"], [15, "DF", "DAVIS", "CD Plaza Amador (PAN)", "31/03/1991"], [16, "DF", "ANDRADE", "LASK Linz (AUT)", "16/10/1998"], [17, "FW", "FAJARDO", "CD Universidad Católica (ECU)", "18/08/1993"], [18, "FW", "WATERMAN", "CD Universidad De Concepción (CHI)", "13/04/1991"], [19, "MF", "QUINTERO", "CD Plaza Amador (PAN)", "18/12/1987"], [20, "MF", "GODOY", "San Diego FC (USA)", "10/02/1990"], [21, "MF", "YANIS", "CD Cobresal (CHI)", "28/01/1996"], [22, "GK", "MOSQUERA", "Al Fayha FC (KSA)", "25/12/1994"], [23, "DF", "A. MURILLO", "Beşiktaş JK (TUR)", "11/02/1996"], [24, "FW", "LONDOÑO", "CD Universidad Católica (ECU)", "21/06/2001"], [25, "DF", "MILLER", "Turan Tovuz (AZE)", "03/04/1992"], [26, "DF", "GUTIÉRREZ", "Deportivo La Guaira (VEN)", "01/09/1998"]]}, "PAR": {"name": "Paraguay", "flag": "🇵🇾", "coach": "Gustavo Alfaro", "p": [[1, "GK", "FERNANDEZ", "Cerro Porteño (PAR)", "29/03/1988"], [2, "DF", "VELAZQUEZ", "Cerro Porteño (PAR)", "17/04/1991"], [3, "DF", "ALDERETE", "Sunderland AFC (ENG)", "26/12/1996"], [4, "DF", "CACERES", "FC Dynamo Moscow (RUS)", "01/06/2000"], [5, "DF", "BALBUENA", "Grêmio FBPA (BRA)", "23/08/1991"], [6, "DF", "ALONSO", "Atlético Mineiro (BRA)", "09/02/1993"], [7, "MF", "SOSA", "SE Palmeiras (BRA)", "31/08/1999"], [8, "MF", "D. GOMEZ", "Brighton & Hove Albion FC (ENG)", "27/03/2003"], [9, "FW", "SANABRIA", "US Cremonese (ITA)", "04/03/1996"], [10, "MF", "M. ALMIRON", "Atlanta United FC (USA)", "10/02/1994"], [11, "MF", "MAURICIO", "SE Palmeiras (BRA)", "22/06/2001"], [12, "GK", "O. GILL", "CA San Lorenzo (ARG)", "11/06/2000"], [13, "DF", "CANALE", "CA Lanús (ARG)", "20/07/1996"], [14, "MF", "CUBAS", "Vancouver Whitecaps FC (CAN)", "11/05/1996"], [15, "DF", "G. GOMEZ", "SE Palmeiras (BRA)", "06/05/1993"], [16, "MF", "BOBADILLA", "São Paulo FC (BRA)", "11/07/2001"], [17, "FW", "R. GAMARRA", "Al Ain FC (UAE)", "11/01/1995"], [18, "FW", "ARCE", "CS Independiente Rivadavia (ARG)", "16/06/1995"], [19, "FW", "ENCISO", "RC Strasbourg (FRA)", "23/01/2004"], [20, "MF", "OJEDA", "Orlando City SC (USA)", "27/06/2000"], [21, "FW", "AVALOS", "CA Independiente (ARG)", "12/10/1990"], [22, "GK", "OLVEIRA", "Club Olimpia (PAR)", "21/04/1993"], [23, "MF", "GALARZA", "Atlanta United FC (USA)", "11/02/2002"], [24, "MF", "CABALLERO", "Portsmouth FC (ENG)", "21/09/2001"], [25, "FW", "PITTA", "Red Bull Bragantino (BRA)", "14/08/1999"], [26, "DF", "MAIDANA", "CA Talleres (ARG)", "26/07/2005"]]}, "POR": {"name": "Portugal", "flag": "🇵🇹", "coach": "Roberto Martínez", "p": [[1, "GK", "DIOGO COSTA", "FC Porto (POR)", "19/09/1999"], [2, "DF", "N. SEMEDO", "Fenerbahçe SK (TUR)", "16/11/1993"], [3, "DF", "RÚBEN DIAS", "Manchester City FC (ENG)", "14/05/1997"], [4, "DF", "TOMÁS A.", "SL Benfica (POR)", "16/05/2002"], [5, "DF", "DALOT", "Manchester United FC (ENG)", "18/03/1999"], [6, "MF", "MATHEUS N.", "Manchester City FC (ENG)", "27/08/1998"], [7, "FW", "RONALDO", "Al Nassr FC (KSA)", "05/02/1985"], [8, "MF", "B. FERNANDES", "Manchester United FC (ENG)", "08/09/1994"], [9, "FW", "G. RAMOS", "Paris Saint-Germain (FRA)", "20/06/2001"], [10, "MF", "BERNARDO", "Manchester City FC (ENG)", "10/08/1994"], [11, "FW", "JOÃO FÉLIX", "Al Nassr FC (KSA)", "10/11/1999"], [12, "GK", "JOSÉ SÁ", "Wolverhampton Wanderers FC (ENG)", "17/01/1993"], [13, "DF", "RENATO VEIGA", "Villarreal CF (ESP)", "29/07/2003"], [14, "DF", "G. INÁCIO", "Sporting CP (POR)", "25/08/2001"], [15, "MF", "JOÃO NEVES", "Paris Saint-Germain (FRA)", "27/09/2004"], [16, "FW", "TRINCÃO", "Sporting CP (POR)", "29/12/1999"], [17, "FW", "RAFA LEÃO", "AC Milan (ITA)", "10/06/1999"], [18, "FW", "NETO", "Chelsea FC (ENG)", "09/03/2000"], [19, "FW", "G. GUEDES", "Real Sociedad (ESP)", "29/11/1996"], [20, "DF", "JOÃO CANCELO", "FC Barcelona (ESP)", "27/05/1994"], [21, "MF", "R. NEVES", "Al Hilal SC (KSA)", "13/03/1997"], [22, "GK", "RUI SILVA", "Sporting CP (POR)", "07/02/1994"], [23, "MF", "VITINHA", "Paris Saint-Germain (FRA)", "13/02/2000"], [24, "DF", "SAMÚ", "RCD Mallorca (ESP)", "27/11/2000"], [25, "DF", "N. MENDES", "Paris Saint-Germain (FRA)", "19/06/2002"], [26, "FW", "F. CONCEIÇÃO", "Juventus FC (ITA)", "14/12/2002"]]}, "QAT": {"name": "Catar", "flag": "🇶🇦", "coach": "Julen Lopetegui", "p": [[1, "GK", "ABUNADA", "Al Rayyan SC (QAT)", "05/02/2000"], [2, "DF", "PEDRO", "Al Sadd SC (QAT)", "06/08/1990"], [3, "DF", "L.MENDES", "Al Wakrah SC (QAT)", "03/07/1990"], [4, "DF", "GUEYE", "Al Arabi SC (QAT)", "22/12/1997"], [5, "DF", "JASSEM", "Al Rayyan SC (QAT)", "20/02/2002"], [6, "MF", "A. AZIZ", "Al Rayyan SC (QAT)", "01/01/1990"], [7, "FW", "ALAAELDIN", "Al Rayyan SC (QAT)", "31/01/1993"], [8, "FW", "EDMILSON JR.", "Al Duhail SC (QAT)", "19/08/1994"], [9, "FW", "MUNTARI", "Al Gharafa SC (QAT)", "20/12/1993"], [10, "FW", "ALHAYDOS", "Al Sadd SC (QAT)", "11/12/1990"], [11, "FW", "AFIF", "Al Sadd SC (QAT)", "18/11/1996"], [12, "MF", "KARIM", "Al Duhail SC (QAT)", "16/09/1990"], [13, "DF", "AYOUB", "Al Gharafa SC (QAT)", "11/03/2005"], [14, "DF", "HOMAM", "Cultural Leonesa (ESP)", "25/08/1999"], [15, "FW", "YUSUF", "Al Wakrah SC (QAT)", "06/08/1999"], [16, "DF", "KHOUKHI", "Al Sadd SC (QAT)", "09/07/1990"], [17, "MF", "A. ALGANEHI", "Al Gharafa SC (QAT)", "22/09/2000"], [18, "DF", "SULTAN", "Al Duhail SC (QAT)", "07/04/1996"], [19, "FW", "ALMOEZ", "Al Duhail SC (QAT)", "19/08/1996"], [20, "MF", "A. FATHY", "Al Arabi SC (QAT)", "25/01/1993"], [21, "GK", "SALAH", "Al Duhail SC (QAT)", "24/04/1999"], [22, "GK", "BARSHAM", "Al Sadd SC (QAT)", "14/02/1998"], [23, "MF", "MADIBO", "Al Wakrah SC (QAT)", "22/10/1996"], [24, "FW", "TAHSIN", "Al Duhail SC (QAT)", "16/06/2006"], [25, "DF", "ALHASHMI", "Al Arabi SC (QAT)", "15/08/2003"], [26, "FW", "MANAI", "Al Shamal SC (QAT)", "25/10/2002"]]}, "KSA": {"name": "Arabia Saudí", "flag": "🇸🇦", "coach": "Georgios Donis", "p": [[1, "GK", "ALAQIDI", "Al Nassr FC (KSA)", "10/05/2000"], [2, "DF", "MAJRASHI", "Al Ahli FC (KSA)", "02/10/1999"], [3, "DF", "LAJAMI", "Al Hilal SC (KSA)", "24/04/1996"], [4, "DF", "ALAMRI", "Al Nassr FC (KSA)", "15/01/1997"], [5, "DF", "ALTAMBAKTI", "Al Hilal SC (KSA)", "09/02/1999"], [6, "MF", "NASSER", "Al Hilal SC (KSA)", "19/12/1998"], [7, "MF", "MUSAB", "Al Qadsiah FC (KSA)", "20/06/2003"], [8, "FW", "AIMAN", "Al Nassr FC (KSA)", "14/05/2001"], [9, "FW", "FERAS", "Al Ahli FC (KSA)", "14/05/2000"], [10, "FW", "SALEM", "Al Hilal SC (KSA)", "19/08/1991"], [11, "FW", "ALSHEHRI", "Al Ittihad (KSA)", "01/11/1993"], [12, "DF", "SAUD", "RC Lens (FRA)", "18/07/1999"], [13, "DF", "NAWAF", "Al Nassr FC (KSA)", "16/09/1999"], [14, "DF", "KADISH", "Al Ittihad (KSA)", "26/09/1992"], [15, "MF", "ALKHAIBARI", "Al Nassr FC (KSA)", "16/08/1996"], [16, "MF", "ZIYAD", "Al Ahli FC (KSA)", "11/11/2001"], [17, "FW", "KHALID", "Al Ettifaq FC (KSA)", "08/11/2000"], [18, "MF", "ALHAJJI", "Neom SC (KSA)", "03/12/1995"], [19, "FW", "ALHAMDDAN", "Al Nassr FC (KSA)", "13/09/1999"], [20, "FW", "MANDASH", "Al Hilal SC (KSA)", "17/10/1994"], [21, "GK", "ALOWAIS", "Al Ula Saudi FC (KSA)", "10/10/1991"], [22, "GK", "ALKASSAR", "Al Qadsiah FC (KSA)", "08/05/1991"], [23, "MF", "KANNO", "Al Hilal SC (KSA)", "22/09/1994"], [24, "DF", "MOTEB", "Al Hilal SC (KSA)", "20/02/2000"], [25, "DF", "JEHAD", "Al Qadsiah FC (KSA)", "21/07/2001"], [26, "DF", "MOHAMMED", "Al Qadsiah FC (KSA)", "11/08/2002"]]}, "SCO": {"name": "Escocia", "flag": "🏴󠁧󠁢󠁳󠁣󠁴", "coach": "Steve Clarke", "p": [[1, "GK", "GUNN", "Nottingham Forest FC (ENG)", "22/01/1996"], [2, "DF", "HICKEY", "Brentford FC (ENG)", "10/06/2002"], [3, "DF", "ROBERTSON", "Liverpool FC (ENG)", "11/03/1994"], [4, "MF", "MCTOMINAY", "SSC Napoli (ITA)", "08/12/1996"], [5, "DF", "HANLEY", "Hibernian FC (SCO)", "20/11/1991"], [6, "DF", "TIERNEY", "Celtic FC (SCO)", "05/06/1997"], [7, "MF", "MCGINN", "Aston Villa FC (ENG)", "18/10/1994"], [8, "MF", "FLETCHER", "Manchester United FC (ENG)", "19/03/2007"], [9, "FW", "DYKES", "Charlton Athletic FC (ENG)", "07/10/1995"], [10, "FW", "ADAMS", "Torino FC (ITA)", "13/07/1996"], [11, "MF", "CHRISTIE", "AFC Bournemouth (ENG)", "22/02/1995"], [12, "GK", "KELLY", "Rangers FC (SCO)", "23/01/1996"], [13, "DF", "HENDRY", "Al Ettifaq FC (KSA)", "07/05/1995"], [14, "FW", "STEWART", "Southampton FC (ENG)", "11/07/1996"], [15, "DF", "SOUTTAR", "Rangers FC (SCO)", "25/09/1996"], [16, "DF", "HYAM", "Wrexham AFC (WAL)", "20/12/1995"], [17, "FW", "GANNON DOAK", "AFC Bournemouth (ENG)", "11/11/2005"], [18, "FW", "HIRST", "Ipswich Town FC (ENG)", "15/02/1999"], [19, "MF", "FERGUSON", "Bologna FC (ITA)", "24/08/1999"], [20, "FW", "SHANKLAND", "Heart Of Midlothian FC (SCO)", "10/08/1995"], [21, "GK", "GORDON", "Heart Of Midlothian FC (SCO)", "31/12/1982"], [22, "DF", "PATTERSON", "Everton FC (ENG)", "16/10/2001"], [23, "MF", "MCLEAN", "Norwich City FC (ENG)", "08/01/1992"], [24, "DF", "RALSTON", "Celtic FC (SCO)", "16/11/1998"], [25, "FW", "CURTIS", "Kilmarnock FC (SCO)", "09/06/2006"], [26, "DF", "MCKENNA", "GNK Dinamo Zagreb (CRO)", "12/11/1996"]]}, "SEN": {"name": "Senegal", "flag": "🇸🇳", "coach": "Pape Thiaw", "p": [[1, "GK", "Y. DIOUF", "OGC Nice (FRA)", "16/11/1999"], [2, "DF", "SARR", "Chelsea FC (ENG)", "29/08/2005"], [3, "DF", "KOULIBALY", "Al Hilal SC (KSA)", "20/06/1991"], [4, "DF", "SECK", "Maccabi Haifa FC (ISR)", "04/06/1992"], [5, "MF", "GANA", "Everton FC (ENG)", "26/09/1989"], [6, "MF", "P.I. CISS", "Rayo Vallecano (ESP)", "16/03/1994"], [7, "FW", "DIAO", "Como (ITA)", "07/09/2005"], [8, "MF", "LAMINE", "AS Monaco (FRA)", "01/01/2004"], [9, "FW", "B. DIENG", "FC Lorient (FRA)", "23/03/2000"], [10, "FW", "MANÉ", "Al Nassr FC (KSA)", "10/04/1992"], [11, "FW", "JACKSON", "FC Bayern München (GER)", "20/06/2001"], [12, "FW", "CHERIF", "Samsunspor (TUR)", "23/01/1996"], [13, "FW", "NDIAYE", "Everton FC (ENG)", "06/03/2000"], [14, "DF", "JAKOBS", "Galatasaray SK (TUR)", "17/08/1999"], [15, "DF", "KRÉPIN", "AS Monaco (FRA)", "25/02/1999"], [16, "GK", "MENDY", "Al Ahli FC (KSA)", "01/03/1992"], [17, "MF", "P.M. SARR", "Tottenham Hotspur FC (ENG)", "14/09/2002"], [18, "FW", "SARR", "Crystal Palace FC (ENG)", "25/02/1998"], [19, "DF", "NIAKHATE", "Olympique Lyonnais (FRA)", "08/03/1996"], [20, "FW", "MBAYE", "Paris Saint-Germain (FRA)", "24/01/2008"], [21, "MF", "H. DIARRA", "Sunderland AFC (ENG)", "03/01/2004"], [22, "MF", "BARA", "FC Bayern München (GER)", "31/12/2007"], [23, "GK", "DIAW", "Le Havre AC (FRA)", "22/06/1993"], [24, "DF", "A. MENDY", "OGC Nice (FRA)", "27/05/2004"], [25, "DF", "DIOUF", "West Ham United FC (ENG)", "29/12/2004"], [26, "MF", "GUEYE", "Villarreal CF (ESP)", "24/01/1999"]]}, "RSA": {"name": "Sudáfrica", "flag": "🇿🇦", "coach": "Hugo Broos", "p": [[1, "GK", "WILLIAMS", "Mamelodi Sundowns FC (RSA)", "21/01/1992"], [2, "DF", "MATULUDI", "Polokwane City FC (RSA)", "14/01/1999"], [3, "DF", "NDAMANE", "Mamelodi Sundowns FC (RSA)", "05/02/2004"], [4, "MF", "MOKOENA", "Mamelodi Sundowns FC (RSA)", "24/01/1997"], [5, "MF", "MBATHA", "Orlando Pirates FC (RSA)", "06/03/2000"], [6, "DF", "MODIBA", "Mamelodi Sundowns FC (RSA)", "22/07/1995"], [7, "FW", "APPOLLIS", "Orlando Pirates FC (RSA)", "25/08/2001"], [8, "FW", "MOREMI", "Orlando Pirates FC (RSA)", "02/10/2000"], [9, "FW", "FOSTER", "Burnley FC (ENG)", "03/09/2000"], [10, "FW", "MOFOKENG", "Orlando Pirates FC (RSA)", "23/10/2004"], [11, "MF", "ZWANE", "Mamelodi Sundowns FC (RSA)", "03/08/1989"], [12, "FW", "MASEKO", "AEL Limassol (CYP)", "11/11/2003"], [13, "MF", "SITHOLE", "CD Tondela (POR)", "03/03/1999"], [14, "DF", "MBOKAZI", "Chicago Fire FC (USA)", "19/09/2005"], [15, "FW", "RAYNERS", "Mamelodi Sundowns FC (RSA)", "19/12/1995"], [16, "GK", "CHAINE", "Orlando Pirates FC (RSA)", "14/12/1996"], [17, "FW", "MAKGPA", "Orlando Pirates FC (RSA)", "05/06/2000"], [18, "DF", "KABINI", "Molde FK (NOR)", "15/03/2004"], [19, "DF", "SIBISI", "Orlando Pirates FC (RSA)", "22/09/1995"], [20, "DF", "MUDAU", "Mamelodi Sundowns FC (RSA)", "26/04/1995"], [21, "DF", "OKON", "Hannover 96 (GER)", "20/02/2004"], [22, "GK", "GOSS", "Siwelele FC (RSA)", "02/04/1994"], [23, "MF", "ADAMS", "Mamelodi Sundowns FC (RSA)", "05/05/2001"], [24, "DF", "MAKHANYA", "Philadelphia Union (USA)", "30/04/2004"], [25, "FW", "SEBELEBELE", "Orlando Pirates FC (RSA)", "21/07/2002"], [26, "DF", "CROSS", "Kaizer Chiefs FC (RSA)", "30/01/2001"]]}, "ESP": {"name": "España", "flag": "🇪🇸", "coach": "Luis de la Fuente", "p": [[1, "GK", "RAYA", "Arsenal FC (ENG)", "15/09/1995"], [2, "DF", "MARC PUBILL", "Atlético De Madrid (ESP)", "20/06/2003"], [3, "DF", "GRIMALDO", "Bayer Leverkusen (GER)", "20/09/1995"], [4, "DF", "ERIC", "FC Barcelona (ESP)", "09/01/2001"], [5, "DF", "M. LLORENTE", "Atlético De Madrid (ESP)", "30/01/1995"], [6, "MF", "MERINO", "Arsenal FC (ENG)", "22/06/1996"], [7, "FW", "FERRAN", "FC Barcelona (ESP)", "29/02/2000"], [8, "MF", "FABIÁN", "Paris Saint-Germain (FRA)", "03/04/1996"], [9, "MF", "GAVI", "FC Barcelona (ESP)", "05/08/2004"], [10, "FW", "OLMO", "FC Barcelona (ESP)", "07/05/1998"], [11, "FW", "YEREMY", "Crystal Palace FC (ENG)", "20/10/2002"], [12, "DF", "PEDRO PORRO", "Tottenham Hotspur FC (ENG)", "13/09/1999"], [13, "GK", "JOAN GARCIA", "FC Barcelona (ESP)", "04/05/2001"], [14, "DF", "LAPORTE", "Athletic Club (ESP)", "27/05/1994"], [15, "MF", "ALEX B.", "Atlético De Madrid (ESP)", "20/07/2001"], [16, "MF", "RODRIGO", "Manchester City FC (ENG)", "22/06/1996"], [17, "FW", "WILLIAMS JR", "Athletic Club (ESP)", "12/07/2002"], [18, "MF", "ZUBIMENDI", "Arsenal FC (ENG)", "02/02/1999"], [19, "FW", "LAMINE YAMAL", "FC Barcelona (ESP)", "13/07/2007"], [20, "MF", "PEDRI", "FC Barcelona (ESP)", "25/11/2002"], [21, "FW", "OYARZABAL", "Real Sociedad (ESP)", "21/04/1997"], [22, "DF", "CUBARSÍ", "FC Barcelona (ESP)", "22/01/2007"], [23, "GK", "UNAI SIMÓN", "Athletic Club (ESP)", "11/06/1997"], [24, "DF", "CUCURELLA", "Chelsea FC (ENG)", "22/07/1998"], [25, "FW", "VICTOR M.V.", "CA Osasuna (ESP)", "13/07/2003"], [26, "FW", "B. IGLESIAS", "RC Celta Vigo (ESP)", "17/01/1993"]]}, "SWE": {"name": "Suecia", "flag": "🇸🇪", "coach": "Graham Potter", "p": [[1, "GK", "ZETTERSTRÖM", "Derby County FC (ENG)", "11/07/1998"], [2, "DF", "LAGERBIELKE", "SC Braga (POR)", "10/04/2000"], [3, "DF", "LINDELÖF", "Aston Villa FC (ENG)", "17/07/1994"], [4, "DF", "HIEN", "Atalanta Bergamo (ITA)", "13/01/1999"], [5, "DF", "GUDMUNDSSON", "Leeds United FC (ENG)", "29/04/1999"], [6, "DF", "H. JOHANSSON", "FC Dallas (USA)", "16/10/1997"], [7, "MF", "BERGVALL", "Tottenham Hotspur FC (ENG)", "02/02/2006"], [8, "DF", "SVENSSON", "Borussia Dortmund (GER)", "12/02/2002"], [9, "FW", "ISAK", "Liverpool FC (ENG)", "21/09/1999"], [10, "MF", "NYGREN", "Celtic FC (SCO)", "08/07/2001"], [11, "FW", "ELANGA", "Newcastle United FC (ENG)", "27/04/2002"], [12, "GK", "V. JOHANSSON", "Stoke City FC (ENG)", "14/09/1998"], [13, "MF", "SEMA", "Pafos FC (CYP)", "30/09/1993"], [14, "DF", "EKDAL", "Burnley FC (ENG)", "21/10/1998"], [15, "DF", "STARFELT", "RC Celta Vigo (ESP)", "01/06/1995"], [16, "MF", "KARLSTRÖM", "Udinese (ITA)", "21/06/1995"], [17, "FW", "GYÖKERES", "Arsenal FC (ENG)", "04/06/1998"], [18, "MF", "AYARI", "Brighton & Hove Albion FC (ENG)", "06/10/2003"], [19, "MF", "SVANBERG", "VfL Wolfsburg (GER)", "05/01/1999"], [20, "DF", "SMITH", "FC St. Pauli (GER)", "08/01/1997"], [21, "DF", "BERNHARDSSON", "Holstein Kiel (GER)", "08/09/1998"], [22, "MF", "ZENELI", "Royale Union Saint-Gilloise (BEL)", "21/11/2002"], [23, "GK", "NORDFELDT", "AIK Stockholm (SWE)", "23/06/1989"], [24, "DF", "STROUD", "Mjällby AIF (SWE)", "22/06/2002"], [25, "FW", "NILSSON", "Club Brugge (BEL)", "23/05/1997"], [26, "FW", "ALI", "Malmö FF (SWE)", "01/07/1998"]]}, "SUI": {"name": "Suiza", "flag": "🇨🇭", "coach": "Murat Yakin", "p": [[1, "GK", "KOBEL", "Borussia Dortmund (GER)", "06/12/1997"], [2, "DF", "MUHEIM", "Hamburger SV (GER)", "24/03/1998"], [3, "DF", "WIDMER", "1. FSV Mainz 05 (GER)", "05/03/1993"], [4, "DF", "ELVEDI", "Borussia Mönchengladbach (GER)", "30/09/1996"], [5, "DF", "AKANJI", "FC Internazionale Milano (ITA)", "19/07/1995"], [6, "MF", "ZAKARIA", "AS Monaco (FRA)", "20/11/1996"], [7, "FW", "EMBOLO", "Stade Rennais FC (FRA)", "14/02/1997"], [8, "MF", "FREULER", "Bologna FC (ITA)", "15/04/1992"], [9, "MF", "MANZAMBI", "SC Freiburg (GER)", "14/10/2005"], [10, "MF", "XHAKA", "Sunderland AFC (ENG)", "27/09/1992"], [11, "FW", "NDOYE", "Nottingham Forest FC (ENG)", "25/10/2000"], [12, "GK", "MVOGO", "FC Lorient (FRA)", "06/06/1994"], [13, "DF", "RODRIGUEZ", "Real Betis (ESP)", "25/08/1992"], [14, "MF", "JASHARI", "AC Milan (ITA)", "30/07/2002"], [15, "MF", "SOW", "Sevilla FC (ESP)", "06/02/1997"], [16, "FW", "FASSNACHT", "BSC Young Boys (SUI)", "11/11/1993"], [17, "FW", "VARGAS", "Sevilla FC (ESP)", "05/08/1998"], [18, "DF", "CÖMERT", "Valencia CF (ESP)", "04/02/1998"], [19, "FW", "OKAFOR", "Leeds United FC (ENG)", "24/05/2000"], [20, "MF", "AEBISCHER", "Pisa SC (ITA)", "06/01/1997"], [21, "GK", "KELLER", "BSC Young Boys (SUI)", "03/07/2002"], [22, "MF", "RIEDER", "FC Augsburg (GER)", "16/02/2002"], [23, "FW", "AMDOUNI", "Burnley FC (ENG)", "04/12/2000"], [24, "DF", "AMENDA", "Eintracht Frankfurt (GER)", "31/07/2003"], [25, "DF", "JAQUEZ", "VfB Stuttgart (GER)", "02/06/2003"], [26, "FW", "ITTEN", "Fortuna Düsseldorf (GER)", "27/12/1996"]]}, "TUN": {"name": "Túnez", "flag": "🇹🇳", "coach": "Sabri Lamouchi", "p": [[1, "GK", "CHAMAKH", "Club Africain (TUN)", "25/08/2001"], [2, "DF", "ABDI", "OGC Nice (FRA)", "20/12/1993"], [3, "DF", "TALBI", "FC Lorient (FRA)", "26/05/1998"], [4, "DF", "REKIK", "NK Maribor (SVN)", "20/12/2001"], [5, "DF", "AROUS", "Kasımpaşa SK (TUR)", "17/07/2004"], [6, "DF", "BRONN", "Servette FC (SUI)", "19/06/1995"], [7, "FW", "ACHOURI", "FC København (DEN)", "10/02/1999"], [8, "FW", "SAAD", "Hannover 96 (GER)", "27/12/1999"], [9, "FW", "MASTOURI", "FC Dynamo Makhachkala (RUS)", "18/06/1997"], [10, "MF", "MEJBRI", "Burnley FC (ENG)", "21/01/2003"], [11, "MF", "GHARBI", "FC Augsburg (GER)", "10/04/2004"], [12, "DF", "BEN OUANES", "Kasımpaşa SK (TUR)", "02/07/1994"], [13, "MF", "KHEDIRA", "1. FC Union Berlin (GER)", "27/01/1994"], [14, "MF", "AYARI", "Paris Saint-Germain (FRA)", "02/02/2005"], [15, "MF", "BELHADJ MAHMOUD", "FC Lugano (SUI)", "24/04/2000"], [16, "GK", "DAHMEN", "CS Sfaxien (TUN)", "28/01/1997"], [17, "MF", "SKHIRI", "Eintracht Frankfurt (GER)", "10/05/1995"], [18, "FW", "ELLOUMI", "Vancouver Whitecaps FC (CAN)", "17/09/2007"], [19, "FW", "CHAOUAT", "Club Africain (TUN)", "08/05/1996"], [20, "DF", "VALERY", "BSC Young Boys (SUI)", "22/02/1999"], [21, "DF", "BEN HMIDA", "Espérance De Tunisie (TUN)", "15/12/1995"], [22, "GK", "BEN HSAN", "Étoile Du Sahel (TUN)", "13/06/1996"], [23, "DF", "NEFFATI", "IFK Norrköping FK (SWE)", "04/09/2004"], [24, "DF", "CHIKHAOUI", "US Monastir (TUN)", "09/06/2004"], [25, "MF", "SLIMANE", "Norwich City FC (ENG)", "16/03/2001"], [26, "MF", "TOUNEKTI", "Celtic FC (SCO)", "13/07/2002"]]}, "TUR": {"name": "Turquía", "flag": "🇹🇷", "coach": "Vincenzo Montella", "p": [[1, "GK", "MERT", "Fenerbahçe SK (TUR)", "01/03/1989"], [2, "DF", "ZEKİ ÇELİK", "AS Roma (ITA)", "17/02/1997"], [3, "DF", "DEMİRAL", "Al Ahli FC (KSA)", "05/03/1998"], [4, "DF", "ÇAĞLAR", "Fenerbahçe SK (TUR)", "23/05/1996"], [5, "MF", "ÖZCAN", "Borussia Dortmund (GER)", "11/01/1998"], [6, "MF", "ORKUN KÖKÇÜ", "Beşiktaş JK (TUR)", "29/12/2000"], [7, "FW", "AKTÜRKOĞLU", "Fenerbahçe SK (TUR)", "21/10/1998"], [8, "FW", "ARDA GÜLER", "Real Madrid C. F. (ESP)", "25/02/2005"], [9, "FW", "DENİZ GÜL", "FC Porto (POR)", "02/07/2004"], [10, "MF", "ÇALHANOĞLU", "FC Internazionale Milano (ITA)", "08/02/1994"], [11, "FW", "YILDIZ", "Juventus FC (ITA)", "04/05/2005"], [12, "GK", "ALTAY", "Manchester United FC (ENG)", "14/04/1998"], [13, "DF", "EREN ELMALI", "Galatasaray SK (TUR)", "07/07/2000"], [14, "DF", "ABDÜLKERİM", "Galatasaray SK (TUR)", "07/09/1994"], [15, "DF", "OZAN KABAK", "TSG Hoffenheim (GER)", "25/03/2000"], [16, "MF", "İSMAİL", "Fenerbahçe SK (TUR)", "26/01/1999"], [17, "FW", "KAHVECİ", "Kasımpaşa SK (TUR)", "15/07/1995"], [18, "DF", "MERT MÜLDÜR", "Fenerbahçe SK (TUR)", "03/04/1999"], [19, "FW", "YUNUS", "Galatasaray SK (TUR)", "07/07/2000"], [20, "DF", "F. KADIOĞLU", "Brighton & Hove Albion FC (ENG)", "07/10/1999"], [21, "FW", "BARIŞ", "Galatasaray SK (TUR)", "23/05/2000"], [22, "MF", "KAAN", "Galatasaray SK (TUR)", "10/11/1994"], [23, "GK", "UĞURCAN", "Galatasaray SK (TUR)", "05/04/1996"], [24, "FW", "OĞUZ", "Fenerbahçe SK (TUR)", "27/10/2000"], [25, "DF", "SAMET AKAYDIN", "Çaykur Rizespor (TUR)", "13/03/1994"], [26, "FW", "CAN UZUN", "Eintracht Frankfurt (GER)", "11/11/2005"]]}, "URU": {"name": "Uruguay", "flag": "🇺🇾", "coach": "Marcelo Bielsa", "p": [[1, "GK", "S. ROCHET", "SC Internacional (BRA)", "23/03/1993"], [2, "DF", "J.M. GIMÉNEZ", "Atlético De Madrid (ESP)", "20/01/1995"], [3, "DF", "S. CACERES", "Club América (MEX)", "18/08/1999"], [4, "DF", "R. ARAUJO", "FC Barcelona (ESP)", "07/03/1999"], [5, "MF", "M. UGARTE", "Manchester United FC (ENG)", "11/04/2001"], [6, "MF", "R. BENTANCUR", "Tottenham Hotspur FC (ENG)", "25/06/1997"], [7, "MF", "N. DE LA CRUZ", "CR Flamengo (BRA)", "01/06/1997"], [8, "MF", "F. VALVERDE", "Real Madrid C. F. (ESP)", "22/07/1998"], [9, "FW", "D. NUÑEZ", "Al Hilal SC (KSA)", "24/06/1999"], [10, "MF", "G. DE ARRASCAETA", "CR Flamengo (BRA)", "01/06/1994"], [11, "FW", "F. PELLISTRI", "Panathinaikos FC (GRE)", "20/12/2001"], [12, "GK", "S. MELE", "CF Monterrey (MEX)", "06/09/1997"], [13, "DF", "G. VARELA", "CR Flamengo (BRA)", "24/03/1993"], [14, "MF", "A. CANOBBIO", "Fluminense FC (BRA)", "01/10/1998"], [15, "MF", "E. MARTINEZ", "SE Palmeiras (BRA)", "17/08/1999"], [16, "DF", "M. OLIVERA", "SSC Napoli (ITA)", "31/10/1997"], [17, "DF", "M. VIÑA", "CA River Plate (ARG)", "09/11/1997"], [18, "FW", "B. RODRIGUEZ", "Club América (MEX)", "20/05/2000"], [19, "FW", "R. AGUIRRE", "Tigres UANL (MEX)", "01/10/1994"], [20, "MF", "M. ARAUJO", "Sporting CP (POR)", "15/02/2000"], [21, "FW", "F. VIÑAS", "Real Oviedo (ESP)", "30/06/1998"], [22, "MF", "J. PIQUEREZ", "SE Palmeiras (BRA)", "24/08/1998"], [23, "GK", "F. MUSLERA", "Estudiantes LP (ARG)", "16/06/1986"], [24, "DF", "S. BUENO", "Wolverhampton Wanderers FC (ENG)", "09/11/1998"], [25, "MF", "J.M. SANABRIA", "Real Salt Lake (USA)", "29/03/2000"], [26, "MF", "R. ZALAZAR", "SC Braga (POR)", "12/08/1999"]]}, "USA": {"name": "EE.UU.", "flag": "🇺🇸", "coach": "Mauricio Pochettino", "p": [[1, "GK", "TURNER", "New England Revolution (USA)", "24/06/1994"], [2, "DF", "DEST", "PSV Eindhoven (NED)", "03/11/2000"], [3, "DF", "RICHARDS", "Crystal Palace FC (ENG)", "28/03/2000"], [4, "MF", "ADAMS", "AFC Bournemouth (ENG)", "14/02/1999"], [5, "DF", "A. ROBINSON", "Fulham FC (ENG)", "08/08/1997"], [6, "DF", "TRUSTY", "Celtic FC (SCO)", "12/08/1998"], [7, "MF", "REYNA", "Borussia Mönchengladbach (GER)", "13/11/2002"], [8, "MF", "MCKENNIE", "Juventus FC (ITA)", "28/08/1998"], [9, "FW", "PEPI", "PSV Eindhoven (NED)", "09/01/2003"], [10, "FW", "PULISIC", "AC Milan (ITA)", "18/09/1998"], [11, "FW", "AARONSON", "Leeds United FC (ENG)", "22/10/2000"], [12, "DF", "M. ROBINSON", "FC Cincinnatti (USA)", "14/03/1997"], [13, "DF", "REAM", "Charlotte FC (USA)", "05/10/1987"], [14, "MF", "BERHALTER", "Vancouver Whitecaps FC (CAN)", "10/05/2001"], [15, "MF", "ROLDAN", "Seattle Sounders FC (USA)", "03/06/1995"], [16, "DF", "FREEMAN", "Villarreal CF (ESP)", "09/08/2004"], [17, "MF", "TILLMAN", "Bayer Leverkusen (GER)", "28/05/2002"], [18, "DF", "ARFSTEN", "Columbus Crew (USA)", "19/04/2001"], [19, "FW", "WRIGHT", "Coventry City FC (ENG)", "27/03/1998"], [20, "FW", "BALOGUN", "AS Monaco (FRA)", "03/07/2001"], [21, "FW", "WEAH", "Olympique Marseille (FRA)", "22/02/2000"], [22, "DF", "MCKENZIE", "Toulouse FC (FRA)", "25/02/1999"], [23, "DF", "SCALLY", "Borussia Mönchengladbach (GER)", "31/12/2002"], [24, "GK", "FREESE", "New York City FC (USA)", "02/09/1998"], [25, "GK", "BRADY", "Chicago Fire FC (USA)", "03/03/2004"], [26, "FW", "ZENDEJAS", "Club América (MEX)", "07/02/1998"]]}, "UZB": {"name": "Uzbekistán", "flag": "🇺🇿", "coach": "Fabio Cannavaro", "p": [[1, "GK", "YUSUPOV", "PFC Navbahor Namangan (UZB)", "04/01/1991"], [2, "DF", "KHUSANOV", "Manchester City FC (ENG)", "29/02/2004"], [3, "DF", "ALIJONOV", "Pakhtakor Tashkent FK (UZB)", "19/04/1997"], [4, "DF", "SAYFIEV", "FK Neftchi Farg'ona (UZB)", "17/01/1991"], [5, "DF", "ASHURMATOV", "Esteghlal Tehran FC (IRN)", "07/07/1996"], [6, "MF", "MOZGOVOY", "Pakhtakor Tashkent FK (UZB)", "02/04/1999"], [7, "MF", "SHUKUROV", "Baniyas Club (UAE)", "22/06/1996"], [8, "MF", "ISKANDEROV", "FK Neftchi Farg'ona (UZB)", "16/10/1993"], [9, "MF", "XAMROBEKOV", "Tractor Sazi Tabriz FC (IRN)", "13/02/1996"], [10, "MF", "MASHARIPOV", "Esteghlal Tehran FC (IRN)", "01/09/1993"], [11, "MF", "URUNOV", "Persepolis FC (IRN)", "19/12/2000"], [12, "GK", "NEMATOV", "Nasaf Qarshi FC (UZB)", "20/03/2001"], [13, "DF", "NASRULLAEV", "Pakhtakor Tashkent FK (UZB)", "23/07/1998"], [14, "FW", "SHOMURODOV", "Başakşehir FK (TUR)", "29/06/1995"], [15, "DF", "ESHMURODOV", "Nasaf Qarshi FC (UZB)", "30/11/1992"], [16, "GK", "ERGASHEV", "FK Neftchi Farg'ona (UZB)", "23/06/1995"], [17, "MF", "KHAMDAMOV", "Pakhtakor Tashkent FK (UZB)", "24/07/1996"], [18, "DF", "ABDULLAEV", "Dibba FC (UAE)", "01/09/1997"], [19, "MF", "GANIEV", "Al Bataeh Club (UAE)", "22/02/1998"], [20, "FW", "AMONOV", "FK Dinamo Samarkand (UZB)", "30/10/1997"], [21, "FW", "SERGEEV", "Persepolis FC (IRN)", "30/04/1993"], [22, "MF", "FAYZULLAEV", "Başakşehir FK (TUR)", "03/10/2003"], [23, "MF", "ESANOV", "FK Buxoro (UZB)", "01/02/2003"], [24, "DF", "KARIMOV", "Surkhon FK (UZB)", "07/08/2007"], [25, "DF", "ULMASALIYEV", "OKMK FK (UZB)", "27/03/2000"], [26, "DF", "UROZOV", "FK Dinamo Samarkand (UZB)", "18/01/2004"]]}};
+const GROUPS={"A": [["MEX", "México", "🇲🇽"], ["KOR", "Corea del Sur", "🇰🇷"], ["CZE", "Rep. Checa", "🇨🇿"], ["RSA", "Sudáfrica", "🇿🇦"]], "B": [["CAN", "Canadá", "🇨🇦"], ["SUI", "Suiza", "🇨🇭"], ["BIH", "Bosnia", "🇧🇦"], ["QAT", "Catar", "🇶🇦"]], "C": [["BRA", "Brasil", "🇧🇷"], ["MAR", "Marruecos", "🇲🇦"], ["SCO", "Escocia", "🏴󠁧󠁢󠁳󠁣󠁴"], ["HAI", "Haití", "🇭🇹"]], "D": [["USA", "EE.UU.", "🇺🇸"], ["AUS", "Australia", "🇦🇺"], ["TUR", "Turquía", "🇹🇷"], ["PAR", "Paraguay", "🇵🇾"]], "E": [["GER", "Alemania", "🇩🇪"], ["CIV", "Costa de Marfil", "🇨🇮"], ["ECU", "Ecuador", "🇪🇨"], ["CUW", "Curazao", "🇨🇼"]], "F": [["NED", "Países Bajos", "🇳🇱"], ["JPN", "Japón", "🇯🇵"], ["SWE", "Suecia", "🇸🇪"], ["TUN", "Túnez", "🇹🇳"]], "G": [["BEL", "Bélgica", "🇧🇪"], ["IRN", "Irán", "🇮🇷"], ["EGY", "Egipto", "🇪🇬"], ["NZL", "Nueva Zelanda", "🇳🇿"]], "H": [["ESP", "España", "🇪🇸"], ["URU", "Uruguay", "🇺🇾"], ["KSA", "Arabia Saudí", "🇸🇦"], ["CPV", "Cabo Verde", "🇨🇻"]], "I": [["FRA", "Francia", "🇫🇷"], ["NOR", "Noruega", "🇳🇴"], ["SEN", "Senegal", "🇸🇳"], ["IRQ", "Irak", "🇮🇶"]], "J": [["ARG", "Argentina", "🇦🇷"], ["AUT", "Austria", "🇦🇹"], ["ALG", "Argelia", "🇩🇿"], ["JOR", "Jordania", "🇯🇴"]], "K": [["POR", "Portugal", "🇵🇹"], ["COL", "Colombia", "🇨🇴"], ["UZB", "Uzbekistán", "🇺🇿"], ["COD", "RD Congo", "🇨🇩"]], "L": [["ENG", "Inglaterra", "🏴󠁧󠁢󠁥󠁮󠁧"], ["CRO", "Croacia", "🇭🇷"], ["GHA", "Ghana", "🇬🇭"], ["PAN", "Panamá", "🇵🇦"]]};
+const MATCHES=[{"d": "Jue 11 jun", "g": "A", "hk": "MEX", "hf": "🇲🇽", "hn": "México", "ak": "RSA", "af": "🇿🇦", "an": "Sudáfrica", "t": "21:00", "v": "Estadio Azteca, Cdad. México", "tv": "DAZN", "k": ""}, {"d": "Vie 12 jun", "g": "A", "hk": "KOR", "hf": "🇰🇷", "hn": "Corea del Sur", "ak": "CZE", "af": "🇨🇿", "an": "Rep. Checa", "t": "04:00", "v": "Estadio Akron, Guadalajara", "tv": "DAZN", "k": ""}, {"d": "Vie 12 jun", "g": "B", "hk": "CAN", "hf": "🇨🇦", "hn": "Canadá", "ak": "BIH", "af": "🇧🇦", "an": "Bosnia", "t": "21:00", "v": "BMO Field, Toronto", "tv": "DAZN", "k": ""}, {"d": "Sáb 13 jun", "g": "B", "hk": "SUI", "hf": "🇨🇭", "hn": "Suiza", "ak": "QAT", "af": "🇶🇦", "an": "Catar", "t": "21:00", "v": "Levi's Stadium, San Francisco", "tv": "DAZN", "k": ""}, {"d": "Sáb 13 jun", "g": "D", "hk": "USA", "hf": "🇺🇸", "hn": "Estados Unidos", "ak": "PAR", "af": "🇵🇾", "an": "Paraguay", "t": "03:00", "v": "SoFi Stadium, Los Ángeles", "tv": "DAZN", "k": ""}, {"d": "Sáb 13 jun", "g": "D", "hk": "AUS", "hf": "🇦🇺", "hn": "Australia", "ak": "TUR", "af": "🇹🇷", "an": "Turquía", "t": "06:00", "v": "BC Place, Vancouver", "tv": "DAZN", "k": ""}, {"d": "Dom 14 jun", "g": "C", "hk": "BRA", "hf": "🇧🇷", "hn": "Brasil", "ak": "MAR", "af": "🇲🇦", "an": "Marruecos", "t": "00:00", "v": "MetLife Stadium, Nueva Jersey", "tv": "DAZN", "k": "BRA"}, {"d": "Dom 14 jun", "g": "C", "hk": "HAI", "hf": "🇭🇹", "hn": "Haití", "ak": "SCO", "af": "🏴󠁧󠁢󠁳󠁣󠁴", "an": "Escocia", "t": "03:00", "v": "Gillette Stadium, Boston", "tv": "DAZN", "k": ""}, {"d": "Dom 14 jun", "g": "E", "hk": "GER", "hf": "🇩🇪", "hn": "Alemania", "ak": "CUW", "af": "🇨🇼", "an": "Curazao", "t": "19:00", "v": "NRG Stadium, Houston", "tv": "RTVE, DAZN", "k": "GER"}, {"d": "Lun 15 jun", "g": "E", "hk": "CIV", "hf": "🇨🇮", "hn": "Costa de Marfil", "ak": "ECU", "af": "🇪🇨", "an": "Ecuador", "t": "01:00", "v": "Lincoln Financial, Filadelfia", "tv": "DAZN", "k": ""}, {"d": "Lun 15 jun", "g": "F", "hk": "NED", "hf": "🇳🇱", "hn": "Países Bajos", "ak": "JPN", "af": "🇯🇵", "an": "Japón", "t": "00:00", "v": "AT&T Stadium, Dallas", "tv": "DAZN", "k": ""}, {"d": "Lun 15 jun", "g": "F", "hk": "SWE", "hf": "🇸🇪", "hn": "Suecia", "ak": "TUN", "af": "🇹🇳", "an": "Túnez", "t": "04:00", "v": "Estadio BBVA, Guadalupe", "tv": "DAZN", "k": ""}, {"d": "Lun 15 jun", "g": "H", "hk": "ESP", "hf": "🇪🇸", "hn": "España", "ak": "CPV", "af": "🇨🇻", "an": "Cabo Verde", "t": "18:00", "v": "Mercedes-Benz Stadium, Atlanta", "tv": "La 1, DAZN", "k": "ESP", "hl": true}, {"d": "Lun 15 jun", "g": "G", "hk": "BEL", "hf": "🇧🇪", "hn": "Bélgica", "ak": "EGY", "af": "🇪🇬", "an": "Egipto", "t": "21:00", "v": "Lumen Field, Seattle", "tv": "DAZN", "k": ""}, {"d": "Mar 16 jun", "g": "G", "hk": "IRN", "hf": "🇮🇷", "hn": "Irán", "ak": "NZL", "af": "🇳🇿", "an": "Nueva Zelanda", "t": "03:00", "v": "SoFi Stadium, Los Ángeles", "tv": "DAZN", "k": ""}, {"d": "Mar 16 jun", "g": "H", "hk": "KSA", "hf": "🇸🇦", "hn": "Arabia Saudí", "ak": "URU", "af": "🇺🇾", "an": "Uruguay", "t": "00:00", "v": "Hard Rock Stadium, Miami", "tv": "DAZN", "k": ""}, {"d": "Mar 16 jun", "g": "I", "hk": "FRA", "hf": "🇫🇷", "hn": "Francia", "ak": "SEN", "af": "🇸🇳", "an": "Senegal", "t": "21:00", "v": "MetLife Stadium, Nueva Jersey", "tv": "RTVE, DAZN", "k": "FRA"}, {"d": "Mié 17 jun", "g": "I", "hk": "IRQ", "hf": "🇮🇶", "hn": "Irak", "ak": "NOR", "af": "🇳🇴", "an": "Noruega", "t": "00:00", "v": "Gillette Stadium, Boston", "tv": "DAZN", "k": ""}, {"d": "Mié 17 jun", "g": "J", "hk": "ARG", "hf": "🇦🇷", "hn": "Argentina", "ak": "ALG", "af": "🇩🇿", "an": "Argelia", "t": "03:00", "v": "Arrowhead Stadium, Kansas City", "tv": "RTVE, DAZN", "k": "ARG"}, {"d": "Mié 17 jun", "g": "J", "hk": "AUT", "hf": "🇦🇹", "hn": "Austria", "ak": "JOR", "af": "🇯🇴", "an": "Jordania", "t": "06:00", "v": "Levi's Stadium, San Francisco", "tv": "DAZN", "k": ""}, {"d": "Mié 17 jun", "g": "K", "hk": "POR", "hf": "🇵🇹", "hn": "Portugal", "ak": "COD", "af": "🇨🇩", "an": "RD Congo", "t": "19:00", "v": "NRG Stadium, Houston", "tv": "RTVE, DAZN", "k": "POR"}, {"d": "Mié 17 jun", "g": "L", "hk": "ENG", "hf": "🏴󠁧󠁢󠁥󠁮󠁧", "hn": "Inglaterra", "ak": "CRO", "af": "🇭🇷", "an": "Croacia", "t": "22:00", "v": "AT&T Stadium, Dallas", "tv": "RTVE, DAZN", "k": "ENG"}, {"d": "Jue 18 jun", "g": "A", "hk": "CZE", "hf": "🇨🇿", "hn": "Rep. Checa", "ak": "RSA", "af": "🇿🇦", "an": "Sudáfrica", "t": "18:00", "v": "Mercedes-Benz Stadium, Atlanta", "tv": "DAZN", "k": ""}, {"d": "Jue 18 jun", "g": "B", "hk": "SUI", "hf": "🇨🇭", "hn": "Suiza", "ak": "BIH", "af": "🇧🇦", "an": "Bosnia", "t": "21:00", "v": "SoFi Stadium, Los Ángeles", "tv": "DAZN", "k": ""}, {"d": "Jue 18 jun", "g": "K", "hk": "UZB", "hf": "🇺🇿", "hn": "Uzbekistán", "ak": "COL", "af": "🇨🇴", "an": "Colombia", "t": "04:00", "v": "Estadio Azteca, Cdad. México", "tv": "DAZN", "k": ""}, {"d": "Jue 18 jun", "g": "L", "hk": "GHA", "hf": "🇬🇭", "hn": "Ghana", "ak": "PAN", "af": "🇵🇦", "an": "Panamá", "t": "01:00", "v": "BMO Field, Toronto", "tv": "DAZN", "k": ""}, {"d": "Vie 19 jun", "g": "A", "hk": "MEX", "hf": "🇲🇽", "hn": "México", "ak": "KOR", "af": "🇰🇷", "an": "Corea del Sur", "t": "03:00", "v": "Estadio Akron, Guadalajara", "tv": "DAZN", "k": ""}, {"d": "Vie 19 jun", "g": "B", "hk": "CAN", "hf": "🇨🇦", "hn": "Canadá", "ak": "QAT", "af": "🇶🇦", "an": "Catar", "t": "00:00", "v": "BC Place, Vancouver", "tv": "DAZN", "k": ""}, {"d": "Vie 19 jun", "g": "D", "hk": "USA", "hf": "🇺🇸", "hn": "Estados Unidos", "ak": "AUS", "af": "🇦🇺", "an": "Australia", "t": "21:00", "v": "Lumen Field, Seattle", "tv": "DAZN", "k": ""}, {"d": "Sáb 20 jun", "g": "C", "hk": "BRA", "hf": "🇧🇷", "hn": "Brasil", "ak": "HAI", "af": "🇭🇹", "an": "Haití", "t": "00:00", "v": "Gillette Stadium, Boston", "tv": "DAZN", "k": "BRA"}, {"d": "Sáb 20 jun", "g": "C", "hk": "SCO", "hf": "🏴󠁧󠁢󠁳󠁣󠁴", "hn": "Escocia", "ak": "MAR", "af": "🇲🇦", "an": "Marruecos", "t": "03:00", "v": "Lincoln Financial, Filadelfia", "tv": "DAZN", "k": ""}, {"d": "Sáb 20 jun", "g": "F", "hk": "NED", "hf": "🇳🇱", "hn": "Países Bajos", "ak": "SWE", "af": "🇸🇪", "an": "Suecia", "t": "19:00", "v": "NRG Stadium, Houston", "tv": "DAZN", "k": ""}, {"d": "Dom 21 jun", "g": "E", "hk": "GER", "hf": "🇩🇪", "hn": "Alemania", "ak": "CIV", "af": "🇨🇮", "an": "Costa de Marfil", "t": "00:00", "v": "BMO Field, Toronto", "tv": "DAZN", "k": "GER"}, {"d": "Dom 21 jun", "g": "H", "hk": "ESP", "hf": "🇪🇸", "hn": "España", "ak": "KSA", "af": "🇸🇦", "an": "Arabia Saudí", "t": "18:00", "v": "Mercedes-Benz Stadium, Atlanta", "tv": "La 1, DAZN", "k": "ESP", "hl": true}, {"d": "Lun 22 jun", "g": "G", "hk": "BEL", "hf": "🇧🇪", "hn": "Bélgica", "ak": "IRN", "af": "🇮🇷", "an": "Irán", "t": "01:00", "v": "SoFi Stadium, Los Ángeles", "tv": "DAZN", "k": ""}, {"d": "Lun 22 jun", "g": "I", "hk": "FRA", "hf": "🇫🇷", "hn": "Francia", "ak": "IRQ", "af": "🇮🇶", "an": "Irak", "t": "23:00", "v": "Lincoln Financial, Filadelfia", "tv": "DAZN", "k": "FRA"}, {"d": "Mar 23 jun", "g": "J", "hk": "ARG", "hf": "🇦🇷", "hn": "Argentina", "ak": "AUT", "af": "🇦🇹", "an": "Austria", "t": "19:00", "v": "AT&T Stadium, Dallas", "tv": "RTVE, DAZN", "k": "ARG"}, {"d": "Mar 23 jun", "g": "K", "hk": "POR", "hf": "🇵🇹", "hn": "Portugal", "ak": "UZB", "af": "🇺🇿", "an": "Uzbekistán", "t": "19:00", "v": "NRG Stadium, Houston", "tv": "DAZN", "k": "POR"}, {"d": "Mar 23 jun", "g": "L", "hk": "ENG", "hf": "🏴󠁧󠁢󠁥󠁮󠁧", "hn": "Inglaterra", "ak": "GHA", "af": "🇬🇭", "an": "Ghana", "t": "22:00", "v": "Gillette Stadium, Boston", "tv": "DAZN", "k": "ENG"}, {"d": "Mié 24 jun", "g": "B", "hk": "SUI", "hf": "🇨🇭", "hn": "Suiza", "ak": "CAN", "af": "🇨🇦", "an": "Canadá", "t": "21:00", "v": "BC Place, Vancouver", "tv": "DAZN", "k": ""}, {"d": "Mié 24 jun", "g": "B", "hk": "BIH", "hf": "🇧🇦", "hn": "Bosnia", "ak": "QAT", "af": "🇶🇦", "an": "Catar", "t": "21:00", "v": "Lumen Field, Seattle", "tv": "DAZN", "k": ""}, {"d": "Jue 25 jun", "g": "A", "hk": "CZE", "hf": "🇨🇿", "hn": "Rep. Checa", "ak": "MEX", "af": "🇲🇽", "an": "México", "t": "03:00", "v": "Estadio Azteca, Cdad. México", "tv": "DAZN", "k": ""}, {"d": "Jue 25 jun", "g": "A", "hk": "RSA", "hf": "🇿🇦", "hn": "Sudáfrica", "ak": "KOR", "af": "🇰🇷", "an": "Corea del Sur", "t": "03:00", "v": "Estadio BBVA, Guadalupe", "tv": "DAZN", "k": ""}, {"d": "Jue 25 jun", "g": "C", "hk": "SCO", "hf": "🏴󠁧󠁢󠁳󠁣󠁴", "hn": "Escocia", "ak": "BRA", "af": "🇧🇷", "an": "Brasil", "t": "00:00", "v": "Hard Rock Stadium, Miami", "tv": "DAZN", "k": "BRA"}, {"d": "Jue 25 jun", "g": "C", "hk": "MAR", "hf": "🇲🇦", "hn": "Marruecos", "ak": "HAI", "af": "🇭🇹", "an": "Haití", "t": "00:00", "v": "Mercedes-Benz Stadium, Atlanta", "tv": "DAZN", "k": ""}, {"d": "Jue 25 jun", "g": "F", "hk": "TUN", "hf": "🇹🇳", "hn": "Túnez", "ak": "NED", "af": "🇳🇱", "an": "Países Bajos", "t": "01:00", "v": "Arrowhead Stadium, Kansas City", "tv": "DAZN", "k": ""}, {"d": "Jue 25 jun", "g": "F", "hk": "JPN", "hf": "🇯🇵", "hn": "Japón", "ak": "SWE", "af": "🇸🇪", "an": "Suecia", "t": "01:00", "v": "AT&T Stadium, Dallas", "tv": "DAZN", "k": ""}, {"d": "Vie 26 jun", "g": "E", "hk": "ECU", "hf": "🇪🇨", "hn": "Ecuador", "ak": "GER", "af": "🇩🇪", "an": "Alemania", "t": "00:00", "v": "MetLife Stadium, Nueva Jersey", "tv": "DAZN", "k": "GER"}, {"d": "Vie 26 jun", "g": "E", "hk": "CUW", "hf": "🇨🇼", "hn": "Curazao", "ak": "CIV", "af": "🇨🇮", "an": "Costa de Marfil", "t": "00:00", "v": "Lincoln Financial, Filadelfia", "tv": "DAZN", "k": ""}, {"d": "Vie 26 jun", "g": "D", "hk": "TUR", "hf": "🇹🇷", "hn": "Turquía", "ak": "USA", "af": "🇺🇸", "an": "Estados Unidos", "t": "04:00", "v": "SoFi Stadium, Los Ángeles", "tv": "DAZN", "k": ""}, {"d": "Vie 26 jun", "g": "D", "hk": "PAR", "hf": "🇵🇾", "hn": "Paraguay", "ak": "AUS", "af": "🇦🇺", "an": "Australia", "t": "04:00", "v": "Levi's Stadium, San Francisco", "tv": "DAZN", "k": ""}, {"d": "Vie 26 jun", "g": "I", "hk": "NOR", "hf": "🇳🇴", "hn": "Noruega", "ak": "FRA", "af": "🇫🇷", "an": "Francia", "t": "21:00", "v": "Gillette Stadium, Boston", "tv": "DAZN", "k": "FRA"}, {"d": "Vie 26 jun", "g": "I", "hk": "SEN", "hf": "🇸🇳", "hn": "Senegal", "ak": "IRQ", "af": "🇮🇶", "an": "Irak", "t": "21:00", "v": "BMO Field, Toronto", "tv": "DAZN", "k": ""}, {"d": "Sáb 27 jun", "g": "G", "hk": "NZL", "hf": "🇳🇿", "hn": "Nueva Zelanda", "ak": "BEL", "af": "🇧🇪", "an": "Bélgica", "t": "05:00", "v": "Lumen Field, Seattle", "tv": "DAZN", "k": ""}, {"d": "Sáb 27 jun", "g": "G", "hk": "EGY", "hf": "🇪🇬", "hn": "Egipto", "ak": "IRN", "af": "🇮🇷", "an": "Irán", "t": "05:00", "v": "BC Place, Vancouver", "tv": "DAZN", "k": ""}, {"d": "Sáb 27 jun", "g": "H", "hk": "URU", "hf": "🇺🇾", "hn": "Uruguay", "ak": "ESP", "af": "🇪🇸", "an": "España", "t": "02:00", "v": "Estadio Akron, Guadalajara", "tv": "La 1, DAZN", "k": "ESP", "hl": true}, {"d": "Sáb 27 jun", "g": "H", "hk": "CPV", "hf": "🇨🇻", "hn": "Cabo Verde", "ak": "KSA", "af": "🇸🇦", "an": "Arabia Saudí", "t": "02:00", "v": "NRG Stadium, Houston", "tv": "DAZN", "k": ""}, {"d": "Dom 28 jun", "g": "J", "hk": "JOR", "hf": "🇯🇴", "hn": "Jordania", "ak": "ARG", "af": "🇦🇷", "an": "Argentina", "t": "04:00", "v": "Arrowhead Stadium, Kansas City", "tv": "DAZN", "k": "ARG"}, {"d": "Dom 28 jun", "g": "J", "hk": "ALG", "hf": "🇩🇿", "hn": "Argelia", "ak": "AUT", "af": "🇦🇹", "an": "Austria", "t": "04:00", "v": "AT&T Stadium, Dallas", "tv": "DAZN", "k": ""}, {"d": "Dom 28 jun", "g": "K", "hk": "COL", "hf": "🇨🇴", "hn": "Colombia", "ak": "POR", "af": "🇵🇹", "an": "Portugal", "t": "01:30", "v": "Hard Rock Stadium, Miami", "tv": "DAZN", "k": "POR"}, {"d": "Dom 28 jun", "g": "K", "hk": "COD", "hf": "🇨🇩", "hn": "RD Congo", "ak": "UZB", "af": "🇺🇿", "an": "Uzbekistán", "t": "01:30", "v": "Mercedes-Benz Stadium, Atlanta", "tv": "DAZN", "k": ""}, {"d": "Dom 28 jun", "g": "L", "hk": "PAN", "hf": "🇵🇦", "hn": "Panamá", "ak": "ENG", "af": "🏴󠁧󠁢󠁥󠁮󠁧", "an": "Inglaterra", "t": "21:00", "v": "SoFi Stadium, Los Ángeles", "tv": "DAZN", "k": "ENG"}, {"d": "Dom 28 jun", "g": "L", "hk": "CRO", "hf": "🇭🇷", "hn": "Croacia", "ak": "GHA", "af": "🇬🇭", "an": "Ghana", "t": "21:00", "v": "Arrowhead Stadium, Kansas City", "tv": "DAZN", "k": ""}];
+
+// RTVE group stage matches
+const RTVE_SET=new Set(["Jue 11 jun|21:00","Vie 12 jun|21:00|BIH","Dom 14 jun|00:00","Dom 14 jun|19:00","Lun 15 jun|18:00","Mar 16 jun|21:00","Mié 17 jun|22:00","Jue 18 jun|21:00|SUI","Vie 19 jun|21:00","Sáb 20 jun|19:00","Dom 21 jun|18:00","Mar 23 jun|19:00|ARG","Mar 23 jun|22:00|ENG","Jue 25 jun|00:00|SCO","Vie 26 jun|00:00|ECU","Sáb 27 jun|02:00","Dom 28 jun|01:30"]);
+
+function isRTVE(m){
+  // RTVE partidos: los 17 de grupos + toda la fase final
+  const rtveMatches=[
+    "MEX+RSA","CAN+BIH","BRA+MAR","GER+CUW","ESP+CPV","FRA+SEN","ENG+CRO",
+    "SUI+BIH","USA+AUS","NED+SWE","ESP+KSA","ARG+AUT","ENG+GHA","SCO+BRA",
+    "ECU+GER","URU+ESP","COL+POR"
+  ];
+  const pair=m.hk+"+"+m.ak;
+  const pairR=m.ak+"+"+m.hk;
+  return rtveMatches.includes(pair)||rtveMatches.includes(pairR);
+}
+
+function show(id,btn){
+  document.querySelectorAll('.sec').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('active'));
+  document.getElementById('sec-'+id).classList.add('active');
+  btn.classList.add('active');
+  if(id==='resultados')fetchLive();
+  if(id==='noticias'&&!newsLoaded)fetchNews();
+}
+
+function buildGroups(){
+  const c=document.getElementById('gcon');
+  c.innerHTML=Object.entries(GROUPS).map(([l,teams])=>{
+    const sub=teams.slice(0,2).map(t=>t[1]).join(' · ')+'...';
+    const rows=teams.map(([k,n,f],i)=>{
+      const dc=i<2?'dg':i===2?'db':'dm';
+      return '<div class="tr"><div class="ti"><div class="qd '+dc+'"></div><span style="font-size:15px">'+f+'</span><span style="font-size:12px;font-weight:500">'+n+'</span></div><span class="ts">0</span><span class="ts">0</span><span class="ts">0</span><span class="ts">0</span><span class="tp">0</span></div>';
+    }).join('');
+    return '<div class="gc"><div class="gh"><h3>GRUPO '+l+'</h3><span>'+sub+'</span></div><div class="gsh"><span>-</span><span>PJ</span><span>G</span><span>E</span><span>P</span><span>Pts</span></div>'+rows+'</div>';
+  }).join('');
+}
+
+let mf='all';
+function filterM(f,btn){
+  mf=f;
+  document.querySelectorAll('.fbt').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  buildMatches();
+}
+function buildMatches(){
+  let filtered;
+  if(mf==='all') filtered=MATCHES;
+  else if(mf==='RTVE') filtered=MATCHES.filter(m=>isRTVE(m));
+  else filtered=MATCHES.filter(m=>m.k===mf||(mf==='ESP'&&m.hl));
+  const byDay={};
+  filtered.forEach(m=>{if(!byDay[m.d])byDay[m.d]=[];byDay[m.d].push(m);});
+  const c=document.getElementById('mcon');
+  if(!Object.keys(byDay).length){c.innerHTML='<div class="empty">No hay partidos para este filtro</div>';return;}
+  c.innerHTML=Object.entries(byDay).map(([day,ms])=>'<div class="dg2"><div class="dl">'+day+'</div>'+
+    ms.map(m=>{
+      const rtve=isRTVE(m);
+      const cls='mc'+(m.hl?' hl':'')+(rtve&&!m.hl?' rtve':'');
+      const tvBadge=rtve?'<span class="bd btv-rtve">&#x1F4FA; RTVE · DAZN</span>':'<span class="bd btv">'+m.tv+'</span>';
+      return '<div class="'+cls+'"><div class="mt2">'+m.t+'</div><div class="mts"><div class="mtm"><span style="font-size:14px">'+m.hf+'</span><span class="mtn">'+m.hn+'</span></div><div class="msep"></div><div class="mtm"><span style="font-size:14px">'+m.af+'</span><span class="mtn">'+m.an+'</span></div></div><div class="mm"><span class="bd bg2">Grupo '+m.g+'</span><span class="mv">'+m.v+'</span>'+tvBadge+'</div></div>';
+    }).join('')+'</div>').join('');
+}
+
+let curG='H';
+function buildStdTabs(){
+  document.getElementById('stabs').innerHTML=Object.keys(GROUPS).map(g=>'<button class="st'+(g===curG?' active':'')+'" onclick="switchG(''+g+'',this)">Grupo '+g+'</button>').join('');
+}
+function switchG(g,btn){
+  curG=g;
+  document.querySelectorAll('.st').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  buildStandings();
+}
+function buildStandings(){
+  const teams=GROUPS[curG];
+  const rows=teams.map(([k,n,f],i)=>{
+    const pc=i<2?'ppq':i===2?'ppr':'ppe';
+    return '<tr><td><div class="tc"><span class="pp '+pc+'">'+(i+1)+'</span><span style="font-size:14px">'+f+'</span><span>'+n+'</span></div></td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td><span class="tpt">0</span></td></tr>';
+  }).join('');
+  document.getElementById('stdcon').innerHTML='<div style="background:var(--card);border:1px solid var(--bdr);border-radius:10px;overflow:hidden"><table class="stable"><thead><tr><th>Equipo</th><th>PJ</th><th>G</th><th>E</th><th>P</th><th>GF</th><th>GC</th><th>DG</th><th>Pts</th></tr></thead><tbody>'+rows+'</tbody></table></div><div style="display:flex;gap:12px;margin-top:7px;flex-wrap:wrap"><div class="gli"><div class="gld" style="background:#388e3c;width:8px;height:8px;border-radius:50%"></div> Avanza a dieciseisavos</div><div class="gli"><div class="gld" style="background:#1565c0;width:8px;height:8px;border-radius:50%"></div> Posible mejor tercero</div></div>';
+}
+
+// JUGADORES
+let curTeam='ESP';
+function buildTeamFilter(){
+  const tf=document.getElementById('tfilter');
+  const order=['ESP','ARG','BRA','FRA','GER','POR','ENG','URU','BEL','NED','CRO','MEX','COL','JPN','KOR','SCO','NOR','SWE','SUI','DEN','AUS','AUT','BIH','GHA','SEN','MAR','CIV','EGY','TUN','TUR','PAR','ECU','IRN','IRQ','JOR','ALG','KSA','CPV','CAN','CUW','CZE','RSA','NZL','QAT','COD','UZB','HAI','PAN'];
+  tf.innerHTML=order.map(k=>{
+    const sq=SQUADS[k];
+    if(!sq)return '';
+    return '<button class="tf2'+(k===curTeam?' active':'')+'" onclick="showTeam(''+k+'',this)">'+sq.flag+' '+sq.name+'</button>';
+  }).join('');
+}
+function showTeam(k,btn){
+  curTeam=k;
+  document.querySelectorAll('.tf2').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  buildSquad();
+}
+function buildSquad(){
+  const sq=SQUADS[curTeam];
+  if(!sq)return;
+  const posOrder={GK:0,DF:1,MF:2,FW:3};
+  const posName={GK:'Porteros',DF:'Defensas',MF:'Centrocampistas',FW:'Delanteros'};
+  const posCls={GK:'pos-gk',DF:'pos-df',MF:'pos-mf',FW:'pos-fw'};
+  const byPos={};
+  sq.p.forEach(([num,pos,name,club,dob])=>{
+    if(!byPos[pos])byPos[pos]=[];
+    byPos[pos].push([num,pos,name,club,dob]);
+  });
+  const secs=Object.entries(posOrder).filter(([p])=>byPos[p]).map(([pos])=>{
+    const players=byPos[pos]||[];
+    const cards=players.map(([num,pos,name,club,dob])=>
+      '<div class="player-card"><div class="pc-top"><div class="pc-num">'+num+'</div><span class="pc-pos '+posCls[pos]+'">'+pos+'</span><div class="pc-name">'+name+'</div></div><div class="pc-club">'+club+'</div><div class="pc-dob">'+dob+'</div></div>'
+    ).join('');
+    return '<div class="squad-section"><div class="squad-pos">'+posName[pos]+' ('+players.length+')</div><div class="squad-grid">'+cards+'</div></div>';
+  }).join('');
+  document.getElementById('squad-wrap').innerHTML='<div class="coach-line">Seleccionador: <strong>'+sq.coach+'</strong></div>'+secs;
+}
+
+function buildBracket(){
+  // Fixed bracket pairings per FIFA regulations
+  const rounds=[
+    {t:'Dieciseisavos',d:'28 jun-3 jul',matches:[
+      {h:'1º A',a:'2º B'},{h:'1º C',a:'2º D'},{h:'1º E',a:'2º F'},{h:'1º G',a:'2º H'},
+      {h:'1º I',a:'2º J'},{h:'1º K',a:'2º L'},{h:'Mejor 3º',a:'Mejor 3º'},{h:'Mejor 3º',a:'Mejor 3º'}
+    ]},
+    {t:'Octavos',d:'4-7 jul',matches:[{h:'TBD',a:'TBD'},{h:'TBD',a:'TBD'},{h:'TBD',a:'TBD'},{h:'TBD',a:'TBD'}]},
+    {t:'Cuartos',d:'9-11 jul',matches:[{h:'TBD',a:'TBD'},{h:'TBD',a:'TBD'}]},
+    {t:'Semi + Final',d:'14-19 jul',matches:[{h:'TBD',a:'TBD'},{h:'TBD',a:'TBD'}]}
+  ];
+  document.getElementById('bracket').innerHTML=rounds.map((r,ri)=>
+    '<div class="rc"><div class="rt">'+r.t+'<br><span style="font-size:8px">'+r.d+'</span></div>'+
+    r.matches.map((m,i)=>
+      '<div class="bm'+(ri===3&&i===1?' fin':'')+'">'+
+      '<div class="bt2"><span style="font-size:10px">&#x1F3F3;</span><span class="'+(m.h==='TBD'||m.h.includes('Mejor')?'tbd':'bracket-ref')+'">'+m.h+'</span></div>'+
+      '<div class="bt2"><span style="font-size:10px">&#x1F3F3;</span><span class="'+(m.a==='TBD'||m.a.includes('Mejor')?'tbd':'bracket-ref')+'">'+m.a+'</span></div>'+
+      '</div>'
+    ).join('')+'</div>'
+  ).join('');
+}
+
+function buildCountdown(){
+  const target=new Date('2026-06-11T19:00:00Z');
+  const now=new Date();
+  const diff=target-now;
+  if(diff<=0){document.getElementById('cdwrap').innerHTML='';return;}
+  const d=Math.floor(diff/86400000);
+  const h=Math.floor((diff%86400000)/3600000);
+  const m=Math.floor((diff%3600000)/60000);
+  document.getElementById('cdwrap').innerHTML='<div class="ib" style="margin-bottom:13px"><div class="ib-i">&#x23F3;</div><div class="ib-t"><h3>EL TORNEO AÚN NO HA COMENZADO</h3><p>Primer partido: &#x1F1F2;&#x1F1FD; México vs. Sudáfrica &#x1F1FF;&#x1F1E6; &mdash; Jue 11 jun &middot; 21:00h &middot; Estadio Azteca</p><div class="cdr"><div class="cdb"><div class="cdn">'+d+'</div><div class="cdl">días</div></div><div class="cdb"><div class="cdn">'+h+'</div><div class="cdl">horas</div></div><div class="cdb"><div class="cdn">'+m+'</div><div class="cdl">min</div></div></div></div></div>';
+}
+
+async function fetchLive(){
+  buildCountdown();
+  const body=document.getElementById('aibody');
+  const icon=document.getElementById('rico');
+  const dot=document.getElementById('livdot');
+  icon.classList.add('spin');
+  body.innerHTML='<div class="ald"><span>Buscando resultados en tiempo real</span><span class="dots"><span>.</span><span>.</span><span>.</span></span></div>';
+  try{
+    const today=new Date().toLocaleDateString('es-ES',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:900,tools:[{type:'web_search_20250305',name:'web_search'}],system:'Eres el asistente de resultados del Mundial FIFA 2026. Hoy es '+today+'. El torneo comienza el 11 de junio de 2026 con México vs Sudáfrica en el Estadio Azteca. Busca el estado actual. Si ya ha comenzado: marcadores en vivo, resultados de hoy, próximos partidos. Si no: días que faltan y primer partido. Responde en español, conciso, con emojis de banderas.',messages:[{role:'user',content:'Estado actual del Mundial FIFA 2026: partidos en vivo, resultados de hoy, próximos partidos.'}]})});
+    const data=await res.json();
+    const text=data.content?.filter(b=>b.type==='text').map(b=>b.text).join('')||'Sin respuesta.';
+    const fmt=text.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n\n/g,'</p><p style="margin-top:8px">').replace(/\n/g,'<br>');
+    const now2=new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
+    const live=text.toLowerCase().includes('en juego')||text.toLowerCase().includes("'")||text.toLowerCase().includes('min)');
+    dot.style.display=live?'block':'none';
+    body.innerHTML='<div class="ar"><p>'+fmt+'</p></div><div class="ut">&#x1F550; Actualizado: '+now2+' &middot; búsqueda web en tiempo real</div>';
+  }catch(e){dot.style.display='none';body.innerHTML='<div class="ar"><p>Error de conexión. Inténtalo de nuevo.</p></div>';}
+  icon.classList.remove('spin');
+}
+
+let newsTimer=null,newsSeconds=300,newsLoaded=false;
+async function fetchNews(){
+  newsLoaded=true;
+  const c=document.getElementById('ncon');
+  c.innerHTML='<div class="ald" style="padding:16px"><span>Buscando noticias</span><span class="dots"><span>.</span><span>.</span><span>.</span></span></div>';
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:900,tools:[{type:'web_search_20250305',name:'web_search'}],system:'Eres el editor de noticias del Mundial FIFA 2026. Busca las 6 noticias más recientes. Devuelve SOLO JSON array sin markdown: [{"emoji":"...","tag":"...","title":"...","time":"Hace Xh","query":"..."}]',messages:[{role:'user',content:'Dame las 6 noticias más recientes del Mundial FIFA 2026 en JSON array.'}]})});
+    const data=await res.json();
+    const raw=data.content?.filter(b=>b.type==='text').map(b=>b.text).join('')||'[]';
+    let news=[];
+    try{news=JSON.parse(raw.replace(/```json|```/g,'').trim());}catch{news=[{emoji:'&#x1F3C6;',tag:'Mundial 2026',title:'El Mundial FIFA 2026 arranca el 11 de junio con México vs Sudáfrica en el Estadio Azteca',time:'Hoy',query:'noticias Mundial FIFA 2026'},{emoji:'&#x1F1EA;&#x1F1F8;',tag:'España',title:'España debuta el 15 de junio ante Cabo Verde en Atlanta a las 18:00h',time:'Reciente',query:'España Cabo Verde Mundial 2026'}];}
+    c.innerHTML='<div class="ng">'+news.map(n=>{const q=(n.query||n.title).replace(/"/g,'&quot;');return '<div class="nc" data-q="'+q+'"><div class="ni">'+n.emoji+'</div><div><div class="ntg">'+n.tag+'</div><div class="nti">'+n.title+'</div><div class="ndt">'+n.time+'</div></div></div>';}).join('')+'</div>';
+  c.querySelectorAll('.nc').forEach(el=>el.addEventListener('click',()=>askNews(el.dataset.q)));
+  startNewsCountdown();
+}
+function startNewsCountdown(){clearInterval(newsTimer);newsSeconds=300;updateNewsCd();newsTimer=setInterval(()=>{newsSeconds--;updateNewsCd();if(newsSeconds<=0)fetchNews();},1000);}
+function updateNewsCd(){const el=document.getElementById('news-cd');if(!el)return;const m=Math.floor(newsSeconds/60);const s=newsSeconds%60;el.textContent='Próxima actualización en '+m+':'+String(s).padStart(2,'0');}
+function askNews(q){show('resultados',document.querySelectorAll('.nb')[5]);document.getElementById('aibody').innerHTML='<div class="ald"><span>Consultando</span><span class="dots"><span>.</span><span>.</span><span>.</span></span></div>';askCustom(q);}
+async function askCustom(q){
+  const icon=document.getElementById('rico');icon.classList.add('spin');
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:800,tools:[{type:'web_search_20250305',name:'web_search'}],system:'Asistente del Mundial FIFA 2026. Responde en español, claro y conciso, con emojis de banderas.',messages:[{role:'user',content:q}]})});
+    const data=await res.json();
+    const text=data.content?.filter(b=>b.type==='text').map(b=>b.text).join('')||'Sin respuesta.';
+    document.getElementById('aibody').innerHTML='<div class="ar"><p>'+text.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>')+'</p></div>';
+  }catch(e){document.getElementById('aibody').innerHTML='<div class="ar"><p>Error de conexión.</p></div>';}
+  icon.classList.remove('spin');
+}
+
+function buildTV(){
+  const chs=[
+    {l:'La 1',bg:'#e8f4fd',c:'#0d47a1',n:'La 1 RTVE',d:'17 partidos de grupos + toda la fase final. Gratuito en abierto por ley.',b:'bfr',bl:'GRATUITO'},
+    {l:'RTVE',bg:'#fff8e1',c:'#e65100',n:'RTVE Play',d:'App y web gratuitas. Los mismos 17 partidos de grupos + fase final en streaming.',b:'bfr',bl:'GRATUITO'},
+    {l:'DAZN',bg:'#fce4ec',c:'#880e4f',n:'DAZN',d:'Derechos del torneo completo en España. Los 104 partidos en streaming. +19,99€.',b:'bsb',bl:'SUSCRIPCIÓN'},
+    {l:'M+',bg:'#e8f5e9',c:'#1b5e20',n:'Movistar+ Vamos',d:'Canal Vamos con cobertura especial y análisis.',b:'bpb',bl:'DE PAGO'}
+  ];
+  document.getElementById('tvcon').innerHTML='<div class="tvh"><h3>&#x1F4FA; PARTIDOS DE ESPAÑA &mdash; GRUPO H</h3><p>Hora española peninsular (CEST) &middot; La 1 RTVE en abierto</p><div class="tvmi"><div class="t">&#x1F1EA;&#x1F1F8; España vs &#x1F1E8;&#x1F1FB; Cabo Verde</div><div class="d">Lun 15 jun &middot; 18:00h &middot; Mercedes-Benz Stadium, Atlanta</div></div><div class="tvmi" style="margin-top:7px"><div class="t">&#x1F1EA;&#x1F1F8; España vs &#x1F1F8;&#x1F1E6; Arabia Saudí</div><div class="d">Dom 21 jun &middot; 18:00h &middot; Mercedes-Benz Stadium, Atlanta</div></div><div class="tvmi" style="margin-top:7px"><div class="t">&#x1F1FA;&#x1F1FE; Uruguay vs &#x1F1EA;&#x1F1F8; España</div><div class="d">Sáb 27 jun &middot; 02:00h &middot; Estadio Akron, Guadalajara</div></div></div><div class="tvcs">'+chs.map(ch=>'<div class="tvc"><div class="tvl" style="background:'+ch.bg+';color:'+ch.c+'">'+ch.l+'</div><div><div class="tvn">'+ch.n+'</div><div class="tvd">'+ch.d+'</div><div class="tvbdg"><span class="bd '+ch.b+'">'+ch.bl+'</span></div></div></div>').join('')+'</div><div style="margin-top:9px;padding:10px 12px;background:#f8f9fc;border-radius:8px;border:1px solid var(--bdr);font-size:11px;color:var(--mut);line-height:1.6">&#x2139;&#xFE0F; RTVE emitirá <strong>17 partidos de la fase de grupos</strong> (el más destacado de cada jornada) más <strong>toda la fase eliminatoria</strong> (dieciseisavos, octavos, cuartos, semis y final). <strong>DAZN</strong> tiene los derechos del torneo completo.</div>';
+}
+
+const SEDES=[
+  {f:'&#x1F1F2;&#x1F1FD;',c:'Ciudad de México',s:'Estadio Azteca',cap:'87.523',g:5},
+  {f:'&#x1F1F2;&#x1F1FD;',c:'Guadalajara',s:'Estadio Akron',cap:'46.232',g:4},
+  {f:'&#x1F1F2;&#x1F1FD;',c:'Monterrey',s:'Estadio BBVA',cap:'53.500',g:4},
+  {f:'&#x1F1E8;&#x1F1E6;',c:'Toronto',s:'BMO Field',cap:'30.000',g:4},
+  {f:'&#x1F1E8;&#x1F1E6;',c:'Vancouver',s:'BC Place',cap:'54.500',g:4},
+  {f:'&#x1F1FA;&#x1F1F8;',c:'Nueva York/NJ',s:'MetLife Stadium',cap:'82.500',g:8},
+  {f:'&#x1F1FA;&#x1F1F8;',c:'Los Ángeles',s:'SoFi Stadium',cap:'70.240',g:8},
+  {f:'&#x1F1FA;&#x1F1F8;',c:'Dallas',s:"AT&T Stadium",cap:'80.000',g:8},
+  {f:'&#x1F1FA;&#x1F1F8;',c:'San Francisco',s:"Levi's Stadium",cap:'68.500',g:7},
+  {f:'&#x1F1FA;&#x1F1F8;',c:'Miami',s:'Hard Rock Stadium',cap:'65.326',g:7},
+  {f:'&#x1F1FA;&#x1F1F8;',c:'Atlanta',s:'Mercedes-Benz Stadium',cap:'71.000',g:7},
+  {f:'&#x1F1FA;&#x1F1F8;',c:'Seattle',s:'Lumen Field',cap:'68.740',g:6},
+  {f:'&#x1F1FA;&#x1F1F8;',c:'Houston',s:'NRG Stadium',cap:'72.220',g:7},
+  {f:'&#x1F1FA;&#x1F1F8;',c:'Filadelfia',s:'Lincoln Financial Field',cap:'69.796',g:6},
+  {f:'&#x1F1FA;&#x1F1F8;',c:'Boston',s:'Gillette Stadium',cap:'65.878',g:6},
+  {f:'&#x1F1FA;&#x1F1F8;',c:'Kansas City',s:'Arrowhead Stadium',cap:'76.416',g:6}
+];
+function buildSedes(){
+  document.getElementById('sdcon').innerHTML=SEDES.map(s=>'<div class="sdc"><div class="sdf">'+s.f+'</div><div class="sdci">'+s.c+'</div><div class="sdst">'+s.s+'</div><div class="sdm"><span class="sdt2">&#x26BD; '+s.g+' partidos</span><span class="sdt2">&#x1F465; '+s.cap+'</span></div></div>').join('');
+}
+
+buildGroups();
+buildMatches();
+buildStdTabs();
+buildStandings();
+buildTeamFilter();
+buildSquad();
+buildBracket();
+buildTV();
+buildSedes();
+</script>
 </body>
 </html>
