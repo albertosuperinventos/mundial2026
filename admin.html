@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Mundial 2026</title>
+    <script type="module">
+        // ========== CONFIGURACIÓN DE FIREBASE (TU CONFIGURACIÓN) ==========
+        const firebaseConfig = {
+            apiKey: "AIzaSyCzHKSy5fgQIa7fGZV5XQItdPd0DPo6vGU",
+            authDomain: "mundial2026-54749.firebaseapp.com",
+            projectId: "mundial2026-54749",
+            storageBucket: "mundial2026-54749.firebasestorage.app",
+            messagingSenderId: "785303580961",
+            appId: "1:785303580961:web:9c59aeae8974b4988d8e60"
+        };
+        
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+        import { getFirestore, doc, setDoc, deleteDoc, getDocs, collection, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+        
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        
+        function generarContraseña() {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            let pass = '';
+            for (let i = 0; i < 10; i++) pass += chars.charAt(Math.floor(Math.random() * chars.length));
+            return pass;
+        }
+        
+        window.loginAdmin = async function() {
+            const email = document.getElementById('adminEmail').value;
+            const password = document.getElementById('adminPassword').value;
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+                document.getElementById('loginPanel').style.display = 'none';
+                document.getElementById('adminPanel').style.display = 'block';
+                cargarUsuarios();
+            } catch(error) {
+                alert('Error: ' + error.message);
+            }
+        };
+        
+        window.crearUsuario = async function() {
+            const nombre = document.getElementById('userNombre').value;
+            const email = document.getElementById('userEmail').value;
+            
+            if (!nombre || !email) {
+                alert('Completa todos los campos');
+                return;
+            }
+            
+            const password = generarContraseña();
+            
+            try {
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                const uid = userCredential.user.uid;
+                
+                await setDoc(doc(db, "usuarios_autorizados", email), {
+                    uid: uid,
+                    nombre: nombre,
+                    email: email,
+                    activo: true,
+                    fecha_creacion: new Date().toISOString()
+                });
+                
+                document.getElementById('resultado').innerHTML = `
+                    <div style="background: #e8f5e9; padding: 15px; border-radius: 10px; margin-top: 15px;">
+                        <h3>✅ Usuario creado</h3>
+                        <p><strong>👤 Nombre:</strong> ${nombre}</p>
+                        <p><strong>📧 Email:</strong> ${email}</p>
+                        <p><strong>🔑 Contraseña:</strong> <code style="background:#fff;padding:2px 5px">${password}</code></p>
+                        <hr>
+                        <textarea rows="4" style="width:100%; font-family:monospace" readonly onclick="this.select()" id="mensajeTexto">
+🎫 TUS CREDENCIALES - MUNDIAL 2026 🎫
+
+📧 Email: ${email}
+🔑 Contraseña: ${password}
+
+🔗 Acceso: https://TU-USUARIO.github.io/TU-REPO/
+
+⚠️ No compartas tus credenciales. La cuenta está limitada a 1 dispositivo.
+                        </textarea>
+                        <button onclick="copiarTexto()" style="margin-top:10px; padding:8px 15px; background:#0a1f4e; color:white; border:none; border-radius:5px; cursor:pointer">📋 Copiar mensaje</button>
+                    </div>
+                `;
+                
+                document.getElementById('userNombre').value = '';
+                document.getElementById('userEmail').value = '';
+                cargarUsuarios();
+                
+            } catch(error) {
+                if (error.code === 'auth/email-already-in-use') {
+                    alert('❌ Este email ya está registrado');
+                } else {
+                    alert('Error: ' + error.message);
+                }
+            }
+        };
+        
+        window.copiarTexto = function() {
+            const texto = document.getElementById('mensajeTexto').value;
+            navigator.clipboard.writeText(texto);
+            alert('Mensaje copiado al portapapeles');
+        };
+        
+        window.toggleEstado = async function(email, activo) {
+            await updateDoc(doc(db, "usuarios_autorizados", email), { activo: activo });
+            cargarUsuarios();
+        };
+        
+        window.eliminarUsuario = async function(email, uid) {
+            if (confirm(`¿Eliminar a ${email}? Esta acción no se puede deshacer.`)) {
+                try {
+                    await deleteDoc(doc(db, "usuarios_autorizados", email));
+                    await deleteDoc(doc(db, "sesiones_activas", email));
+                    cargarUsuarios();
+                    alert('Usuario eliminado correctamente');
+                } catch(error) {
+                    alert('Error: ' + error.message);
+                }
+            }
+        };
+        
+        async function cargarUsuarios() {
+            const querySnapshot = await getDocs(collection(db, "usuarios_autorizados"));
+            const tbody = document.getElementById('tablaUsuarios');
+            tbody.innerHTML = '';
+            
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                    <td>${data.nombre || '-'}</td>
+                    <td>${data.email}</td>
+                    <td>${data.activo ? '✅ Activo' : '❌ Inactivo'}</td>
+                    <td>${new Date(data.fecha_creacion).toLocaleDateString()}</td>
+                    <td>
+                        <button onclick="toggleEstado('${data.email}', ${!data.activo})" style="padding:5px 10px; margin:2px; cursor:pointer; background:${data.activo ? '#e74c3c' : '#27ae60'}; color:white; border:none; border-radius:5px">
+                            ${data.activo ? '🔴 Desactivar' : '🟢 Activar'}
+                        </button>
+                        <button onclick="eliminarUsuario('${data.email}', '${data.uid}')" style="padding:5px 10px; margin:2px; background:#e74c3c; color:white; border:none; border-radius:5px; cursor:pointer">
+                            🗑️ Eliminar
+                        </button>
+                    </td>
+                `;
+            });
+        }
+        
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                document.getElementById('loginPanel').style.display = 'none';
+                document.getElementById('adminPanel').style.display = 'block';
+                cargarUsuarios();
+            } else {
+                document.getElementById('loginPanel').style.display = 'block';
+                document.getElementById('adminPanel').style.display = 'none';
+            }
+        });
+    </script>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:'Barlow',sans-serif;background:#f0f2f5;padding:20px;max-width:1200px;margin:auto}
+        .panel{background:white;padding:25px;border-radius:12px;margin-bottom:20px;box-shadow:0 2px 10px rgba(0,0,0,0.1)}
+        h1{color:#0a1f4e;margin-bottom:20px}
+        h2{color:#0a1f4e;margin-bottom:15px;font-size:18px}
+        input,button{padding:10px;margin:5px;border-radius:8px}
+        input{border:1px solid #ddd;width:250px}
+        button{background:#0a1f4e;color:white;border:none;cursor:pointer}
+        button:hover{background:#c8a020}
+        table{width:100%;border-collapse:collapse;margin-top:15px}
+        th,td{border:1px solid #ddd;padding:10px;text-align:left}
+        th{background:#0a1f4e;color:white}
+        .admin-badge{background:#c8a020;color:#0a1f4e;padding:5px 10px;border-radius:5px;display:inline-block;margin-bottom:15px;font-weight:bold}
+        code{background:#f0f0f0;padding:2px 5px;border-radius:4px;font-family:monospace}
+        textarea{background:#f8f9fc;border:1px solid #ddd;border-radius:8px;padding:10px;font-family:monospace;width:100%}
+        hr{margin:10px 0}
+    </style>
+</head>
+<body>
+    <h1>🏆 Panel de Administración - Mundial 2026</h1>
+    
+    <div id="loginPanel" class="panel">
+        <h2>🔐 Acceso Administrador</h2>
+        <input type="email" id="adminEmail" placeholder="Email admin">
+        <input type="password" id="adminPassword" placeholder="Contraseña">
+        <button onclick="loginAdmin()">Ingresar</button>
+    </div>
+    
+    <div id="adminPanel" style="display:none">
+        <div class="admin-badge">👑 MODO ADMINISTRADOR</div>
+        
+        <div class="panel">
+            <h2>➕ Crear Nuevo Usuario</h2>
+            <input type="text" id="userNombre" placeholder="Nombre completo">
+            <input type="email" id="userEmail" placeholder="Email del usuario">
+            <button onclick="crearUsuario()">✨ Crear usuario y contraseña</button>
+            <div id="resultado"></div>
+        </div>
+        
+        <div class="panel">
+            <h2>📋 Usuarios Autorizados</h2>
+            <table style="width:100%">
+                <thead>
+                    <tr><th>Nombre</th><th>Email</th><th>Estado</th><th>Fecha</th><th>Acciones</th></tr>
+                </thead>
+                <tbody id="tablaUsuarios">
+                    <tr><td colspan="5">Cargando...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>

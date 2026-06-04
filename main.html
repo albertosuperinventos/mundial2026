@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>Copa Mundial FIFA 2026</title>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+    
+    <script type="module">
+        // ========== CONFIGURACIÓN DE FIREBASE (TU CONFIGURACIÓN) ==========
+        const firebaseConfig = {
+            apiKey: "AIzaSyCzHKSy5fgQIa7fGZV5XQItdPd0DPo6vGU",
+            authDomain: "mundial2026-54749.firebaseapp.com",
+            projectId: "mundial2026-54749",
+            storageBucket: "mundial2026-54749.firebasestorage.app",
+            messagingSenderId: "785303580961",
+            appId: "1:785303580961:web:9c59aeae8974b4988d8e60"
+        };
+        
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+        
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        
+        // Generar huella única del dispositivo
+        function obtenerHuellaDispositivo() {
+            const componentes = [
+                navigator.userAgent,
+                screen.width + 'x' + screen.height,
+                screen.colorDepth,
+                navigator.language,
+                new Date().getTimezoneOffset(),
+                navigator.hardwareConcurrency || 0
+            ];
+            let hash = 0;
+            const str = componentes.join('|');
+            for (let i = 0; i < str.length; i++) {
+                hash = ((hash << 5) - hash) + str.charCodeAt(i);
+                hash |= 0;
+            }
+            return Math.abs(hash).toString(16);
+        }
+        
+        const huellaActual = obtenerHuellaDispositivo();
+        
+        async function verificarSesionUnica(email, nuevaHuella) {
+            const userRef = doc(db, "sesiones_activas", email);
+            const userSnap = await getDoc(userRef);
+            
+            if (userSnap.exists()) {
+                const datos = userSnap.data();
+                const huellaGuardada = datos.huella;
+                const ultimoAcceso = new Date(datos.ultimoAcceso);
+                const ahora = new Date();
+                const horasDiferencia = (ahora - ultimoAcceso) / (1000 * 60 * 60);
+                
+                if (huellaGuardada !== nuevaHuella && horasDiferencia < 24) {
+                    return { permitido: false, mensaje: "❌ Esta cuenta ya está activa en otro dispositivo. Solo puede usarse en un dispositivo cada 24 horas." };
+                }
+            }
+            
+            await setDoc(userRef, {
+                huella: nuevaHuella,
+                ultimoAcceso: new Date().toISOString(),
+                email: email
+            }, { merge: true });
+            
+            return { permitido: true };
+        }
+        
+        window.login = async function() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const errorDiv = document.getElementById('errorMsg');
+            
+            errorDiv.style.display = 'none';
+            
+            if (!email || !password) {
+                errorDiv.textContent = '❌ Completa todos los campos.';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            
+            try {
+                const userCredential = await signInWithEmailAndPassword(auth, email, password);
+                const user = userCredential.user;
+                
+                const autorizadoRef = doc(db, "usuarios_autorizados", email);
+                const autorizadoSnap = await getDoc(autorizadoRef);
+                
+                if (!autorizadoSnap.exists() || autorizadoSnap.data().activo !== true) {
+                    errorDiv.textContent = '❌ No tienes acceso autorizado. Contacta con el administrador.';
+                    errorDiv.style.display = 'block';
+                    await signOut(auth);
+                    return;
+                }
+                
+                const sesion = await verificarSesionUnica(email, huellaActual);
+                if (!sesion.permitido) {
+                    errorDiv.textContent = sesion.mensaje;
+                    errorDiv.style.display = 'block';
+                    await signOut(auth);
+                    return;
+                }
+                
+                document.getElementById('loginScreen').style.display = 'none';
+                document.getElementById('appScreen').style.display = 'block';
+                iniciarMundial();
+                
+            } catch(error) {
+                if (error.code === 'auth/invalid-credential') {
+                    errorDiv.textContent = '❌ Email o contraseña incorrectos.';
+                } else if (error.code === 'auth/too-many-requests') {
+                    errorDiv.textContent = '❌ Demasiados intentos. Intenta más tarde.';
+                } else {
+                    errorDiv.textContent = '❌ Error de conexión. Intenta de nuevo.';
+                }
+                errorDiv.style.display = 'block';
+            }
+        };
+        
+        window.logout = async function() {
+            const user = auth.currentUser;
+            if (user) {
+                const userRef = doc(db, "sesiones_activas", user.email);
+                await setDoc(userRef, { activo: false, cerrado: new Date().toISOString() }, { merge: true });
+            }
+            await signOut(auth);
+            document.getElementById('loginScreen').style.display = 'flex';
+            document.getElementById('appScreen').style.display = 'none';
+        };
+        
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                const autorizadoRef = doc(db, "usuarios_autorizados", user.email);
+                const autorizadoSnap = await getDoc(autorizadoRef);
+                
+                if (autorizadoSnap.exists() && autorizadoSnap.data().activo === true) {
+                    const sesion = await verificarSesionUnica(user.email, huellaActual);
+                    if (sesion.permitido) {
+                        document.getElementById('loginScreen').style.display = 'none';
+                        document.getElementById('appScreen').style.display = 'block';
+                        iniciarMundial();
+                        return;
+                    }
+                }
+                await signOut(auth);
+            }
+            document.getElementById('loginScreen').style.display = 'flex';
+            document.getElementById('appScreen').style.display = 'none';
+        });
+        
+        // ========== DATOS DEL MUNDIAL ==========
+        const EQUIPOS = {
+            'MEX':{nombre:'México',flag:'🇲🇽'},'KOR':{nombre:'Corea del Sur',flag:'🇰🇷'},'CZE':{nombre:'Rep. Checa',flag:'🇨🇿'},'RSA':{nombre:'Sudáfrica',flag:'🇿🇦'},
+            'CAN':{nombre:'Canadá',flag:'🇨🇦'},'SUI':{nombre:'Suiza',flag:'🇨🇭'},'BIH':{nombre:'Bosnia',flag:'🇧🇦'},'QAT':{nombre:'Catar',flag:'🇶🇦'},
+            'BRA':{nombre:'Brasil',flag:'🇧🇷'},'MAR':{nombre:'Marruecos',flag:'🇲🇦'},'SCO':{nombre:'Escocia',flag:'🏴󠁧󠁢󠁳󠁣󠁴󠁿'},'HAI':{nombre:'Haití',flag:'🇭🇹'},
+            'USA':{nombre:'EE.UU.',flag:'🇺🇸'},'AUS':{nombre:'Australia',flag:'🇦🇺'},'TUR':{nombre:'Turquía',flag:'🇹🇷'},'PAR':{nombre:'Paraguay',flag:'🇵🇾'},
+            'GER':{nombre:'Alemania',flag:'🇩🇪'},'CIV':{nombre:'Costa de Marfil',flag:'🇨🇮'},'ECU':{nombre:'Ecuador',flag:'🇪🇨'},'CUW':{nombre:'Curazao',flag:'🇨🇼'},
+            'NED':{nombre:'Países Bajos',flag:'🇳🇱'},'JPN':{nombre:'Japón',flag:'🇯🇵'},'SWE':{nombre:'Suecia',flag:'🇸🇪'},'TUN':{nombre:'Túnez',flag:'🇹🇳'},
+            'BEL':{nombre:'Bélgica',flag:'🇧🇪'},'IRN':{nombre:'Irán',flag:'🇮🇷'},'EGY':{nombre:'Egipto',flag:'🇪🇬'},'NZL':{nombre:'N. Zelanda',flag:'🇳🇿'},
+            'ESP':{nombre:'España',flag:'🇪🇸'},'URU':{nombre:'Uruguay',flag:'🇺🇾'},'KSA':{nombre:'Arabia Saudí',flag:'🇸🇦'},'CPV':{nombre:'Cabo Verde',flag:'🇨🇻'},
+            'FRA':{nombre:'Francia',flag:'🇫🇷'},'NOR':{nombre:'Noruega',flag:'🇳🇴'},'SEN':{nombre:'Senegal',flag:'🇸🇳'},'IRQ':{nombre:'Irak',flag:'🇮🇶'},
+            'ARG':{nombre:'Argentina',flag:'🇦🇷'},'AUT':{nombre:'Austria',flag:'🇦🇹'},'ALG':{nombre:'Argelia',flag:'🇩🇿'},'JOR':{nombre:'Jordania',flag:'🇯🇴'},
+            'POR':{nombre:'Portugal',flag:'🇵🇹'},'COL':{nombre:'Colombia',flag:'🇨🇴'},'UZB':{nombre:'Uzbekistán',flag:'🇺🇿'},'COD':{nombre:'RD Congo',flag:'🇨🇩'},
+            'ENG':{nombre:'Inglaterra',flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿'},'CRO':{nombre:'Croacia',flag:'🇭🇷'},'GHA':{nombre:'Ghana',flag:'🇬🇭'},'PAN':{nombre:'Panamá',flag:'🇵🇦'}
+        };
+        
+        const GRUPOS = {
+            'A':['MEX','KOR','CZE','RSA'],'B':['CAN','SUI','BIH','QAT'],'C':['BRA','MAR','SCO','HAI'],
+            'D':['USA','AUS','TUR','PAR'],'E':['GER','CIV','ECU','CUW'],'F':['NED','JPN','SWE','TUN'],
+            'G':['BEL','IRN','EGY','NZL'],'H':['ESP','URU','KSA','CPV'],'I':['FRA','NOR','SEN','IRQ'],
+            'J':['ARG','AUT','ALG','JOR'],'K':['POR','COL','UZB','COD'],'L':['ENG','CRO','GHA','PAN']
+        };
+        
+        const PARTIDOS = [
+            {dia:'Jue 11 jun',grupo:'A',local:'MEX',visitante:'RSA',hora:'21:00',estadio:'Estadio Azteca, Ciudad de México',tv:'DAZN',destacadoRTVE:true,tipo:'Inaugural'},
+            {dia:'Vie 12 jun',grupo:'A',local:'KOR',visitante:'CZE',hora:'04:00',estadio:'Estadio Akron, Guadalajara',tv:'DAZN',destacadoRTVE:false},
+            {dia:'Vie 12 jun',grupo:'B',local:'CAN',visitante:'BIH',hora:'21:00',estadio:'BMO Field, Toronto',tv:'DAZN',destacadoRTVE:false},
+            {dia:'Sáb 13 jun',grupo:'B',local:'SUI',visitante:'QAT',hora:'21:00',estadio:"Levi's Stadium, San Francisco",tv:'DAZN',destacadoRTVE:false},
+            {dia:'Sáb 13 jun',grupo:'D',local:'USA',visitante:'PAR',hora:'03:00',estadio:'SoFi Stadium, Los Ángeles',tv:'DAZN',destacadoRTVE:false},
+            {dia:'Dom 14 jun',grupo:'C',local:'BRA',visitante:'MAR',hora:'00:00',estadio:'MetLife Stadium, Nueva Jersey',tv:'DAZN',destacadoRTVE:true,tipo:'Destacado'},
+            {dia:'Lun 15 jun',grupo:'H',local:'ESP',visitante:'CPV',hora:'18:00',estadio:'Mercedes-Benz Stadium, Atlanta',tv:'La 1 · DAZN',destacadoRTVE:true,tipo:'España'},
+            {dia:'Mar 16 jun',grupo:'I',local:'FRA',visitante:'SEN',hora:'21:00',estadio:'MetLife Stadium, Nueva Jersey',tv:'DAZN',destacadoRTVE:false},
+            {dia:'Mié 17 jun',grupo:'J',local:'ARG',visitante:'ALG',hora:'03:00',estadio:'Arrowhead Stadium, Kansas City',tv:'DAZN',destacadoRTVE:false},
+            {dia:'Mié 17 jun',grupo:'K',local:'POR',visitante:'COD',hora:'19:00',estadio:'NRG Stadium, Houston',tv:'DAZN',destacadoRTVE:false},
+            {dia:'Mié 17 jun',grupo:'L',local:'ENG',visitante:'CRO',hora:'22:00',estadio:'AT&T Stadium, Dallas',tv:'DAZN',destacadoRTVE:false},
+            {dia:'Dom 21 jun',grupo:'H',local:'ESP',visitante:'KSA',hora:'18:00',estadio:'Mercedes-Benz Stadium, Atlanta',tv:'La 1 · DAZN',destacadoRTVE:true,tipo:'España'},
+            {dia:'Sáb 27 jun',grupo:'H',local:'URU',visitante:'ESP',hora:'02:00',estadio:'Estadio Akron, Guadalajara',tv:'La 1 · DAZN',destacadoRTVE:true,tipo:'España'}
+        ];
+        
+        const GOLEADORES = [
+            {pos:1,nombre:'Erling Haaland',pais:'Noruega',goles:12,flag:'🇳🇴'},
+            {pos:2,nombre:'Romelu Lukaku',pais:'Bélgica',goles:10,flag:'🇧🇪'},
+            {pos:3,nombre:'Cristiano Ronaldo',pais:'Portugal',goles:9,flag:'🇵🇹'},
+            {pos:4,nombre:'Harry Kane',pais:'Inglaterra',goles:8,flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿'},
+            {pos:5,nombre:'Kylian Mbappé',pais:'Francia',goles:8,flag:'🇫🇷'},
+            {pos:6,nombre:'Lionel Messi',pais:'Argentina',goles:7,flag:'🇦🇷'},
+            {pos:7,nombre:'Robert Lewandowski',pais:'Polonia',goles:7,flag:'🇵🇱'},
+            {pos:8,nombre:'Vinícius Jr',pais:'Brasil',goles:6,flag:'🇧🇷'},
+            {pos:9,nombre:'Olivier Giroud',pais:'Francia',goles:6,flag:'🇫🇷'},
+            {pos:10,nombre:'Alexander Isak',pais:'Suecia',goles:6,flag:'🇸🇪'}
+        ];
+        
+        const SEDES = [
+            {pais:'🇲🇽',ciudad:'Ciudad de México',estadio:'Estadio Azteca',partidos:5,capacidad:'87,523'},
+            {pais:'🇲🇽',ciudad:'Guadalajara',estadio:'Estadio Akron',partidos:4,capacidad:'46,232'},
+            {pais:'🇨🇦',ciudad:'Toronto',estadio:'BMO Field',partidos:4,capacidad:'30,000'},
+            {pais:'🇨🇦',ciudad:'Vancouver',estadio:'BC Place',partidos:4,capacidad:'54,500'},
+            {pais:'🇺🇸',ciudad:'Nueva York/NJ',estadio:'MetLife Stadium',partidos:8,capacidad:'82,500'},
+            {pais:'🇺🇸',ciudad:'Los Ángeles',estadio:'SoFi Stadium',partidos:8,capacidad:'70,240'},
+            {pais:'🇺🇸',ciudad:'Dallas',estadio:'AT&T Stadium',partidos:8,capacidad:'80,000'},
+            {pais:'🇺🇸',ciudad:'Miami',estadio:'Hard Rock Stadium',partidos:7,capacidad:'65,326'},
+            {pais:'🇺🇸',ciudad:'Atlanta',estadio:'Mercedes-Benz Stadium',partidos:7,capacidad:'71,000'},
+            {pais:'🇺🇸',ciudad:'Houston',estadio:'NRG Stadium',partidos:7,capacidad:'72,220'}
+        ];
+        
+        // Funciones del Mundial
+        function buildGrupos() {
+            const container = document.getElementById('gruposContainer');
+            let html = '';
+            for (const [letra, equipos] of Object.entries(GRUPOS)) {
+                html += `<div class="gc"><div class="gh"><h3>GRUPO ${letra}</h3><span>${EQUIPOS[equipos[0]].nombre} · ${EQUIPOS[equipos[1]].nombre}...</span></div><div class="gsh"><span></span><span>PJ</span><span>G</span><span>E</span><span>P</span><span>Pts</span></div>`;
+                equipos.forEach((eq, idx) => {
+                    const claseColor = idx < 2 ? 'dg' : (idx === 2 ? 'db' : 'dm');
+                    html += `<div class="tr"><div class="ti"><div class="qd ${claseColor}"></div><span style="font-size:16px">${EQUIPOS[eq].flag}</span><span style="font-size:13px;font-weight:500">${EQUIPOS[eq].nombre}</span></div><span class="ts">0</span><span class="ts">0</span><span class="ts">0</span><span class="ts">0</span><span class="tp">0</span></div>`;
+                });
+                html += `</div>`;
+            }
+            container.innerHTML = html;
+        }
+        
+        function buildPartidos() {
+            const container = document.getElementById('partidosContainer');
+            const porDia = {};
+            PARTIDOS.forEach(p => { if (!porDia[p.dia]) porDia[p.dia] = []; porDia[p.dia].push(p); });
+            let html = '';
+            for (const [dia, partidos] of Object.entries(porDia)) {
+                html += `<div class="dl">${dia}</div>`;
+                partidos.forEach(p => {
+                    let claseExtra = '', badgeTV = `<span class="bd btv">${p.tv}</span>`;
+                    if (p.tipo === 'España') { claseExtra = 'rtve'; badgeTV = `<span class="bd rtve-badge">🇪🇸 RTVE · La 1</span>`; }
+                    else if (p.destacadoRTVE && p.tipo === 'Destacado') { badgeTV = `<span class="bd rtve-badge">📺 RTVE · Destacado</span> <span class="bd btv" style="margin-left:4px">${p.tv}</span>`; }
+                    else if (p.destacadoRTVE && p.tipo === 'Inaugural') { badgeTV = `<span class="bd rtve-badge">🏆 Inaugural · RTVE</span>`; }
+                    html += `<div class="mc ${claseExtra}"><div class="mt2">${p.hora}</div><div class="mts"><div class="mtm"><span style="font-size:16px">${EQUIPOS[p.local].flag}</span><span class="mtn">${EQUIPOS[p.local].nombre}</span></div><div class="msep"></div><div class="mtm"><span style="font-size:16px">${EQUIPOS[p.visitante].flag}</span><span class="mtn">${EQUIPOS[p.visitante].nombre}</span></div></div><div class="mm"><span class="bd bg2">Grupo ${p.grupo}</span><span class="mv" style="font-size:9px;display:block;margin-top:3px">${p.estadio}</span>${badgeTV}</div></div>`;
+                });
+            }
+            container.innerHTML = html;
+        }
+        
+        function buildClasificacion(grupo = 'A') {
+            const equipos = GRUPOS[grupo];
+            let html = `<table class="stb"><thead><tr><th>Equipo</th><th>PJ</th><th>G</th><th>E</th><th>P</th><th>GF</th><th>GC</th><th>DG</th><th>Pts</th></tr></thead><tbody>`;
+            equipos.forEach(eq => { html += `<tr><td style="text-align:left"><span style="font-size:16px;margin-right:8px">${EQUIPOS[eq].flag}</span>${EQUIPOS[eq].nombre}</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td><strong>0</strong></td>`; });
+            html += `</tbody></table>`;
+            document.getElementById('clasificacionContainer').innerHTML = html;
+        }
+        
+        function buildTabsClasificacion() {
+            const container = document.getElementById('gruposTabs');
+            let html = '';
+            for (const letra of Object.keys(GRUPOS)) { html += `<button class="st ${letra === 'A' ? 'active' : ''}" onclick="cambiarGrupoClasificacion('${letra}', this)">Grupo ${letra}</button>`; }
+            container.innerHTML = html;
+        }
+        
+        window.cambiarGrupoClasificacion = function(grupo, btn) {
+            document.querySelectorAll('#gruposTabs .st').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            buildClasificacion(grupo);
+        };
+        
+        function buildGoleadores() {
+            let html = `<table class="scorers-table"><thead><tr><th>#</th><th>Jugador</th><th>País</th><th>Goles</th></tr></thead><tbody>`;
+            GOLEADORES.forEach(g => { html += `<tr><td style="font-weight:700;color:var(--gold)">${g.pos}</td><td style="font-weight:600">${g.nombre}</td><td>${g.flag} ${g.pais}</td><td style="font-size:18px;font-weight:700;color:var(--navy)">${g.goles}</td>`; });
+            html += `</tbody></table>`;
+            document.getElementById('goleadoresContainer').innerHTML = html;
+        }
+        
+        function buildCruces() {
+            const rondas = [{nombre:'Dieciseisavos',partidos:16},{nombre:'Octavos',partidos:8},{nombre:'Cuartos',partidos:4},{nombre:'Semifinales',partidos:2},{nombre:'Final',partidos:1}];
+            let html = `<div class="bk">`;
+            rondas.forEach(r => { html += `<div class="rc"><div class="rt">${r.nombre}</div>`; for (let i = 0; i < r.partidos; i++) { html += `<div class="bm"><div class="bt2"><span>🏳️</span><span class="tbd">Por determinar</span></div><div class="bt2"><span>🏳️</span><span class="tbd">Por determinar</span></div></div>`; } html += `</div>`; });
+            html += `</div>`;
+            document.getElementById('crucesContainer').innerHTML = html;
+        }
+        
+        function buildResultados() {
+            document.getElementById('resultadosContainer').innerHTML = `<div class="info-badge" style="background:#fff3e0">🏆 Partido Inaugural: <strong>México vs Sudáfrica</strong> — 11 de junio de 2026 — 21:00h — Estadio Azteca</div><div class="mc hl"><div class="mt2">21:00</div><div class="mts"><div class="mtm"><span style="font-size:18px">🇲🇽</span><span class="mtn">México</span></div><div class="msep"></div><div class="mtm"><span style="font-size:18px">🇿🇦</span><span class="mtn">Sudáfrica</span></div></div><div class="mm"><span class="bd bg2">Inaugural · Grupo A</span><span class="mv">Estadio Azteca · 11 jun 2026</span></div></div><div class="info-badge" style="margin-top:12px">📡 Los resultados en vivo se actualizarán durante el Mundial 2026.</div>`;
+        }
+        
+        function buildTV() {
+            document.getElementById('tvContainer').innerHTML = `<div class="info-badge">📺 <strong>RTVE (La 1 · Teledeporte · RTVE Play)</strong> — En abierto y gratuito</div>
+            <div class="gc" style="margin-bottom:15px"><div class="gh"><h3>🇪🇸 PARTIDOS DE ESPAÑA EN RTVE</h3><span>Fase de Grupos</span></div>
+            <div class="mc rtve"><div class="mt2">18:00</div><div class="mts"><div class="mtm"><span style="font-size:16px">🇪🇸</span><span class="mtn">España vs Cabo Verde</span></div></div><div class="mm"><span class="bd rtve-badge">La 1 · 15 junio</span></div></div>
+            <div class="mc rtve"><div class="mt2">18:00</div><div class="mts"><div class="mtm"><span style="font-size:16px">🇪🇸</span><span class="mtn">España vs Arabia Saudí</span></div></div><div class="mm"><span class="bd rtve-badge">La 1 · 21 junio</span></div></div>
+            <div class="mc rtve"><div class="mt2">02:00</div><div class="mts"><div class="mtm"><span style="font-size:16px">🇺🇾</span><span class="mtn">Uruguay vs España</span></div></div><div class="mm"><span class="bd rtve-badge">La 1 · 27 junio</span></div></div></div>
+            <div class="info-badge" style="margin-top:12px">🎯 <strong>Semifinales · Final · Tercer puesto</strong> también en RTVE en abierto. El resto de partidos, solo en DAZN (suscripción).</div>`;
+        }
+        
+        function buildSedes() {
+            let html = '';
+            SEDES.forEach(s => { html += `<div class="sdc"><div class="sdf">${s.pais}</div><div class="sdci">${s.ciudad}</div><div class="sdst">${s.estadio}</div><div class="sdm"><span class="sdt2">⚽ ${s.partidos} partidos</span><span class="sdt2">👥 ${s.capacidad}</span></div></div>`; });
+            document.getElementById('sedesContainer').innerHTML = html;
+        }
+        
+        window.showSection = function(id) {
+            document.querySelectorAll('.sec').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.nb').forEach(b => b.classList.remove('active'));
+            document.getElementById('sec-' + id).classList.add('active');
+            event.target.classList.add('active');
+        };
+        
+        function iniciarMundial() {
+            buildGrupos();
+            buildPartidos();
+            buildTabsClasificacion();
+            buildClasificacion('A');
+            buildGoleadores();
+            buildCruces();
+            buildResultados();
+            buildTV();
+            buildSedes();
+        }
+    </script>
+    
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        :root{--navy:#0a1f4e;--navy2:#132a66;--gold:#c8a020;--gold2:#e8c040;--bg:#f2f4f8;--card:#fff;--bdr:#e0e4ee;--txt:#111827;--mut:#6b7280}
+        body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--txt);min-height:100vh}
+        .app{max-width:1000px;margin:0 auto;padding-bottom:50px}
+        .hdr{background:linear-gradient(135deg,#07163a 0%,#0d2460 55%,#0a1f4e 100%);padding:20px;position:relative}
+        .hi{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:15px}
+        .hl{display:flex;align-items:center;gap:15px}
+        .logo{width:55px;height:55px;background:rgba(255,255,255,0.1);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:bold;color:var(--gold)}
+        .htx h1{color:white;font-size:22px;font-weight:700;font-family:'Barlow Condensed',sans-serif}
+        .htx p{color:rgba(255,255,255,0.6);font-size:12px;margin-top:3px}
+        .hr2{text-align:right}
+        .hr2 .hd{font-size:11px;color:rgba(255,255,255,0.5)}
+        .hr2 .hb{font-size:13px;color:var(--gold);font-weight:600}
+        .gline{height:3px;background:linear-gradient(90deg,transparent,var(--gold)20%,var(--gold2)50%,var(--gold)80%,transparent)}
+        .nav{display:flex;background:white;border-bottom:1px solid var(--bdr);position:sticky;top:0;z-index:100;overflow-x:auto;gap:2px;padding:0 5px}
+        .nav::-webkit-scrollbar{display:none}
+        .nb{flex:none;padding:12px 16px;font-size:13px;font-weight:600;color:var(--mut);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
+        .nb.active{color:var(--navy);border-bottom-color:var(--gold)}
+        .sec{display:none;padding:20px 15px}
+        .sec.active{display:block}
+        .stitle{font-size:22px;font-weight:700;color:var(--navy);margin-bottom:15px;font-family:'Barlow Condensed',sans-serif}
+        .src-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--mut);background:#f0f2f8;padding:5px 12px;border-radius:20px;margin-bottom:15px}
+        .info-badge{background:#e8f0fe;border-left:3px solid var(--gold);padding:10px 15px;font-size:12px;color:var(--navy);margin-bottom:15px;border-radius:8px}
+        .gg{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:15px}
+        .gc{background:var(--card);border:1px solid var(--bdr);border-radius:12px;overflow:hidden}
+        .gh{background:var(--navy);color:white;padding:10px 15px;display:flex;justify-content:space-between;align-items:center}
+        .gh h3{font-size:14px;font-weight:700}
+        .gh span{font-size:10px;color:rgba(255,255,255,0.5)}
+        .gsh{display:grid;grid-template-columns:1fr 40px 40px 40px 40px 45px;padding:8px 12px;background:#f8f9fc;border-bottom:1px solid var(--bdr);font-size:10px;font-weight:700;color:var(--mut);text-align:center}
+        .tr{display:grid;grid-template-columns:1fr 40px 40px 40px 40px 45px;padding:8px 12px;border-bottom:1px solid var(--bdr);align-items:center}
+        .ti{display:flex;align-items:center;gap:8px}
+        .qd{width:8px;height:8px;border-radius:50%}
+        .dg{background:#388e3c}
+        .db{background:#1565c0}
+        .dm{background:#9e9e9e}
+        .mc{background:var(--card);border:1px solid var(--bdr);border-radius:10px;padding:12px;margin-bottom:8px;display:flex;align-items:center;gap:12px}
+        .mc.hl{border-left:3px solid var(--gold)}
+        .mc.rtve{border-left:3px solid #e63946}
+        .mt2{font-size:12px;color:var(--mut);min-width:45px;font-weight:600}
+        .mts{flex:1}
+        .mtm{display:flex;align-items:center;gap:8px;padding:2px 0}
+        .msep{height:1px;background:var(--bdr);margin:3px 0}
+        .mtn{font-size:13px;font-weight:500;flex:1}
+        .mm{text-align:right}
+        .bd{font-size:9px;font-weight:700;padding:3px 8px;border-radius:4px}
+        .bg2{background:#e3f2fd;color:#0d47a1}
+        .btv{background:#e8f5e9;color:#1b5e20}
+        .rtve-badge{background:#e63946;color:white}
+        .dl{font-size:11px;font-weight:700;color:var(--mut);margin:15px 0 8px 0;padding-bottom:5px;border-bottom:1px solid var(--bdr)}
+        .stb{width:100%;border-collapse:collapse;background:var(--card);border-radius:10px;overflow:hidden}
+        .stb th{background:var(--navy);color:white;padding:10px;font-size:11px;text-align:center}
+        .stb td{padding:10px;font-size:13px;text-align:center;border-bottom:1px solid var(--bdr)}
+        .stb td:first-child{text-align:left}
+        .scorers-table{width:100%;border-collapse:collapse;background:var(--card);border-radius:10px;overflow:hidden}
+        .scorers-table th{background:var(--navy);color:white;padding:12px;font-size:12px;text-align:center}
+        .scorers-table td{padding:10px;font-size:13px;text-align:center;border-bottom:1px solid var(--bdr)}
+        .bw{overflow-x:auto}
+        .bk{display:flex;gap:15px;min-width:700px}
+        .rc{flex:1}
+        .rt{font-size:11px;font-weight:700;text-align:center;padding:10px;background:var(--navy);color:white;border-radius:8px;margin-bottom:10px}
+        .bm{background:var(--card);border:1px solid var(--bdr);border-radius:8px;margin-bottom:8px;padding:8px}
+        .bt2{display:flex;align-items:center;gap:6px;font-size:11px;padding:4px 0}
+        .tbd{color:var(--mut);font-style:italic}
+        .sdg{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+        .sdc{background:var(--card);border:1px solid var(--bdr);border-radius:10px;padding:12px}
+        .sdf{font-size:28px;margin-bottom:5px}
+        .sdci{font-size:14px;font-weight:700;color:var(--navy)}
+        .sdst{font-size:11px;color:var(--mut)}
+        .sdt2{display:inline-block;font-size:10px;background:#f0f2f8;padding:2px 8px;border-radius:4px;margin-top:6px;margin-right:5px}
+        .stt{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:15px}
+        .st{padding:6px 14px;border:1px solid var(--bdr);border-radius:20px;font-size:12px;font-weight:500;background:var(--card);cursor:pointer}
+        .st.active{background:var(--navy);color:white;border-color:var(--navy)}
+        
+        /* Login */
+        #loginScreen{position:fixed;top:0;left:0;width:100%;height:100%;background:linear-gradient(135deg,#07163a,#0d2460);display:flex;align-items:center;justify-content:center;z-index:2000}
+        .login-card{background:white;padding:40px;border-radius:20px;width:90%;max-width:380px;text-align:center}
+        .login-card .logo{font-size:64px;margin-bottom:10px}
+        .login-card h1{color:#0a1f4e;font-size:24px}
+        .login-card p{color:#666;margin-bottom:25px;font-size:14px}
+        .login-card input{width:100%;padding:12px 15px;margin:8px 0;border:1px solid #ddd;border-radius:10px;font-size:16px}
+        .login-card button{width:100%;padding:12px;background:#c8a020;color:white;border:none;border-radius:10px;font-size:16px;font-weight:bold;cursor:pointer;margin-top:15px}
+        .login-card button:hover{background:#b08810}
+        .error-msg{color:#e74c3c;font-size:13px;margin-top:12px;display:none}
+        .logout-btn{position:fixed;bottom:20px;right:20px;background:#e74c3c;color:white;border:none;padding:10px 20px;border-radius:30px;cursor:pointer;z-index:1000;font-size:12px}
+        .info-sesion{position:fixed;bottom:20px;left:20px;background:rgba(0,0,0,0.7);color:white;padding:5px 10px;border-radius:20px;font-size:10px;z-index:1000}
+        #appScreen{display:none}
+        @media (max-width:600px){.gsh,.tr{grid-template-columns:1fr 30px 30px 30px 30px 35px}.mc{flex-wrap:wrap}.mm{width:100%;text-align:left}}
+    </style>
+</head>
+<body>
+    <div id="loginScreen">
+        <div class="login-card">
+            <div class="logo">🏆</div>
+            <h1>COPA MUNDIAL 2026</h1>
+            <p>Acceso autorizado · 1 dispositivo por cuenta</p>
+            <input type="email" id="email" placeholder="Email" autocomplete="email">
+            <input type="password" id="password" placeholder="Contraseña" autocomplete="current-password">
+            <button onclick="login()">🔐 Ingresar</button>
+            <div id="errorMsg" class="error-msg"></div>
+        </div>
+    </div>
+    
+    <div id="appScreen">
+        <button class="logout-btn" onclick="logout()">🚪 Cerrar sesión</button>
+        <div class="info-sesion">🔒 Sesión activa - 1 dispositivo</div>
+        
+        <div class="app">
+            <div class="hdr">
+                <div class="hi">
+                    <div class="hl"><div class="logo">🏆</div><div class="htx"><h1>COPA MUNDIAL FIFA 2026</h1><p>Estados Unidos · Canadá · México</p></div></div>
+                    <div class="hr2"><div class="hd">11 jun — 19 jul 2026</div><div class="hb">48 equipos · 104 partidos</div></div>
+                </div>
+            </div>
+            <div class="gline"></div>
+            
+            <div class="nav">
+                <button class="nb active" onclick="showSection('grupos')">🏆 Grupos</button>
+                <button class="nb" onclick="showSection('partidos')">📅 Partidos</button>
+                <button class="nb" onclick="showSection('clasificacion')">📊 Clasificación</button>
+                <button class="nb" onclick="showSection('goleadores')">⚽ Goleadores</button>
+                <button class="nb" onclick="showSection('cruces')">🔀 Cruces</button>
+                <button class="nb" onclick="showSection('resultados')">🔴 Resultados</button>
+                <button class="nb" onclick="showSection('tv')">📺 Dónde ver</button>
+                <button class="nb" onclick="showSection('sedes')">🏟️ Sedes</button>
+            </div>
+            
+            <div class="sec active" id="sec-grupos"><div class="stitle">Fase de Grupos — 12 Grupos · 48 Equipos</div><div class="src-badge">✓ Datos oficiales FIFA — Sorteo 5 dic 2025</div><div style="display:flex; gap:15px; margin-bottom:15px; flex-wrap:wrap"><span style="font-size:12px">🟢 1º y 2º → Dieciseisavos</span><span style="font-size:12px">🔵 8 mejores 3ºs</span></div><div id="gruposContainer" class="gg"></div></div>
+            <div class="sec" id="sec-partidos"><div class="stitle">Calendario Oficial — Hora española (CEST)</div><div class="info-badge">📺 <strong>RTVE (La 1/TDP):</strong> Todos los partidos de España · 1 destacado por jornada · Semifinales · Final · Tercer puesto</div><div id="partidosContainer"></div></div>
+            <div class="sec" id="sec-clasificacion"><div class="stitle">Clasificación por Grupo</div><div class="stt" id="gruposTabs"></div><div id="clasificacionContainer"></div></div>
+            <div class="sec" id="sec-goleadores"><div class="stitle">⚽ Máximos Goleadores</div><div class="info-badge">📊 Datos basados en eliminatorias oficiales. Los goles se actualizarán durante el torneo.</div><div id="goleadoresContainer"></div></div>
+            <div class="sec" id="sec-cruces"><div class="stitle">Eliminatorias</div><div class="info-badge">🏆 Dieciseisavos: 28 jun–3 jul | Octavos: 4–7 jul | Cuartos: 9–11 jul | Semis: 14–15 jul | <strong>FINAL: 19 jul — MetLife, Nueva Jersey</strong></div><div class="bw"><div class="bk" id="crucesContainer"></div></div></div>
+            <div class="sec" id="sec-resultados"><div class="stitle">Resultados Oficiales</div><div id="resultadosContainer"></div></div>
+            <div class="sec" id="sec-tv"><div class="stitle">📺 Dónde Ver en España</div><div id="tvContainer"></div></div>
+            <div class="sec" id="sec-sedes"><div class="stitle">16 Sedes Oficiales</div><div class="src-badge">✓ Confirmadas por FIFA</div><div class="sdg" id="sedesContainer"></div></div>
+        </div>
+    </div>
+</body>
+</html>
