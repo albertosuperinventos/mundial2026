@@ -22,6 +22,8 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
         
+        let esAdmin = true;
+        
         function generarContraseña() {
             const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
             let pass = '';
@@ -50,24 +52,26 @@
         };
         
         window.crearUsuario = async function() {
-            const nombre = document.getElementById('userNombre').value;
-            const email = document.getElementById('userEmail').value;
+            let nombre = document.getElementById('userNombre').value;
+            let email = document.getElementById('userEmail').value;
             
             if (!nombre || !email) {
                 alert('Completa todos los campos');
                 return;
             }
             
+            // FORZAR EMAIL EN MINÚSCULAS (evita errores case-sensitive)
+            const emailLower = email.toLowerCase();
             const password = generarContraseña();
             
             try {
-                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                const userCredential = await createUserWithEmailAndPassword(auth, emailLower, password);
                 const uid = userCredential.user.uid;
                 
-                await setDoc(doc(db, "usuarios_autorizados", email), {
+                await setDoc(doc(db, "usuarios_autorizados", emailLower), {
                     uid: uid,
                     nombre: nombre,
-                    email: email,
+                    email: emailLower,
                     activo: true,
                     fecha_creacion: new Date().toISOString()
                 });
@@ -76,13 +80,13 @@
                     <div style="background: #e8f5e9; padding: 15px; border-radius: 10px; margin-top: 15px;">
                         <h3>✅ Usuario creado</h3>
                         <p><strong>👤 Nombre:</strong> ${nombre}</p>
-                        <p><strong>📧 Email:</strong> ${email}</p>
+                        <p><strong>📧 Email:</strong> ${emailLower}</p>
                         <p><strong>🔑 Contraseña:</strong> <code style="background:#fff;padding:2px 5px">${password}</code></p>
                         <hr>
                         <textarea rows="4" style="width:100%; font-family:monospace" readonly onclick="this.select()" id="mensajeTexto">
 🎫 TUS CREDENCIALES - MUNDIAL 2026 🎫
 
-📧 Email: ${email}
+📧 Email: ${emailLower}
 🔑 Contraseña: ${password}
 
 🔗 Acceso: https://albertosuperinventos.github.io/mundial2026/
@@ -133,12 +137,11 @@
             }
         };
         
-        // NUEVO: Forzar cierre de sesión de un usuario (borrar su sesión activa)
         window.forzarCierreSesion = async function(email) {
-            if (confirm(`¿Forzar cierre de sesión de ${email}?\n\nEsto permitirá que el usuario pueda iniciar sesión desde cualquier dispositivo inmediatamente.`)) {
+            if (confirm(`¿Forzar cierre de sesión de ${email}?`)) {
                 try {
                     await deleteDoc(doc(db, "sesiones_activas", email));
-                    alert(`✅ Sesión de ${email} cerrada forzadamente.\n\nEl usuario puede volver a iniciar sesión sin esperar 24h.`);
+                    alert(`✅ Sesión de ${email} cerrada forzadamente.`);
                     cargarSesionesActivas();
                 } catch(error) {
                     alert('Error: ' + error.message);
@@ -171,7 +174,6 @@
             });
         }
         
-        // NUEVO: Cargar sesiones activas (para ver quién está conectado)
         async function cargarSesionesActivas() {
             const querySnapshot = await getDocs(collection(db, "sesiones_activas"));
             const tbody = document.getElementById('tablaSesiones');
@@ -201,12 +203,12 @@
         }
         
         onAuthStateChanged(auth, (user) => {
-            if (user) {
+            if (user && esAdmin) {
                 document.getElementById('loginPanel').style.display = 'none';
                 document.getElementById('adminPanel').style.display = 'block';
                 cargarUsuarios();
                 cargarSesionesActivas();
-            } else {
+            } else if (!user) {
                 document.getElementById('loginPanel').style.display = 'block';
                 document.getElementById('adminPanel').style.display = 'none';
             }
@@ -230,7 +232,6 @@
         code{background:#f0f0f0;padding:2px 5px;border-radius:4px;font-family:monospace}
         textarea{background:#f8f9fc;border:1px solid #ddd;border-radius:8px;padding:10px;font-family:monospace;width:100%}
         hr{margin:10px 0}
-        .sesion-card{background:#fff3e0;border-left:3px solid #e67e22;margin-bottom:10px}
     </style>
 </head>
 <body>
@@ -269,11 +270,11 @@
         </div>
         
         <div class="panel">
-            <h2>🔓 Sesiones Activas (dispositivos conectados)</h2>
-            <p style="font-size:12px; color:#666; margin-bottom:10px">⚠️ Usa "Forzar cierre" si un usuario no puede iniciar sesión porque el sistema cree que ya está conectado en otro dispositivo.</p>
+            <h2>🔓 Sesiones Activas</h2>
+            <p style="font-size:12px; color:#666; margin-bottom:10px">Usa "Forzar cierre" si un usuario no puede iniciar sesión.</p>
             <table style="width:100%">
                 <thead>
-                    <tr><th>Email</th><th>Huella dispositivo</th><th>Último acceso</th><th>Acción</th></tr>
+                    <tr><th>Email</th><th>Dispositivo</th><th>Último acceso</th><th>Acción</th></tr>
                 </thead>
                 <tbody id="tablaSesiones">
                     <tr><td colspan="4">Cargando...</td></tr>
