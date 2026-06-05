@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
     <title>Admin - Mundial 2026</title>
     <script type="module">
         const firebaseConfig = {
@@ -60,7 +60,6 @@
                 return;
             }
             
-            // FORZAR EMAIL EN MINÚSCULAS (evita errores case-sensitive)
             const emailLower = email.toLowerCase();
             const password = generarContraseña();
             
@@ -83,7 +82,7 @@
                         <p><strong>📧 Email:</strong> ${emailLower}</p>
                         <p><strong>🔑 Contraseña:</strong> <code style="background:#fff;padding:2px 5px">${password}</code></p>
                         <hr>
-                        <textarea rows="4" style="width:100%; font-family:monospace" readonly onclick="this.select()" id="mensajeTexto">
+                        <textarea rows="4" style="width:100%; font-family:monospace; font-size:12px" readonly onclick="this.select()" id="mensajeTexto">
 🎫 TUS CREDENCIALES - MUNDIAL 2026 🎫
 
 📧 Email: ${emailLower}
@@ -94,7 +93,7 @@
 ⚠️ La cuenta permite 1 dispositivo cada 24 horas.
 ⚠️ Si tienes problemas, contacta con el administrador.
                         </textarea>
-                        <button onclick="copiarTexto()" style="margin-top:10px; padding:8px 15px; background:#0a1f4e; color:white; border:none; border-radius:5px; cursor:pointer">📋 Copiar mensaje</button>
+                        <button onclick="copiarTexto()" style="margin-top:10px; padding:8px 15px; background:#0a1f4e; color:white; border:none; border-radius:5px; cursor:pointer; width:100%">📋 Copiar mensaje</button>
                     </div>
                 `;
                 
@@ -151,55 +150,59 @@
         
         async function cargarUsuarios() {
             const querySnapshot = await getDocs(collection(db, "usuarios_autorizados"));
-            const tbody = document.getElementById('tablaUsuarios');
-            tbody.innerHTML = '';
+            const container = document.getElementById('usuariosContainer');
+            if (!container) return;
             
+            if (querySnapshot.empty) {
+                container.innerHTML = '<div class="empty">No hay usuarios</div>';
+                return;
+            }
+            
+            let html = '';
             querySnapshot.forEach((doc) => {
                 const data = doc.data();
-                const row = tbody.insertRow();
-                row.innerHTML = `
-                    <td>${data.nombre || '-'}</td>
-                    <td>${data.email}</td>
-                    <td>${data.activo ? '✅ Activo' : '❌ Inactivo'}</td>
-                    <td>${new Date(data.fecha_creacion).toLocaleDateString()}</td>
-                    <td>
-                        <button onclick="toggleEstado('${data.email}', ${!data.activo})" style="padding:5px 10px; margin:2px; cursor:pointer; background:${data.activo ? '#e74c3c' : '#27ae60'}; color:white; border:none; border-radius:5px">
-                            ${data.activo ? '🔴 Desactivar' : '🟢 Activar'}
-                        </button>
-                        <button onclick="eliminarUsuario('${data.email}', '${data.uid}')" style="padding:5px 10px; margin:2px; background:#e74c3c; color:white; border:none; border-radius:5px; cursor:pointer">
-                            🗑️ Eliminar
-                        </button>
-                    </td>
+                html += `
+                    <div class="user-card">
+                        <div class="user-field"><span class="label">👤 Nombre:</span> ${data.nombre || '-'}</div>
+                        <div class="user-field"><span class="label">📧 Email:</span> ${data.email}</div>
+                        <div class="user-field"><span class="label">📅 Fecha:</span> ${new Date(data.fecha_creacion).toLocaleDateString()}</div>
+                        <div class="user-field"><span class="label">🔘 Estado:</span> ${data.activo ? '✅ Activo' : '❌ Inactivo'}</div>
+                        <div class="user-actions">
+                            <button class="btn-warning" onclick="toggleEstado('${data.email}', ${!data.activo})">${data.activo ? '🔴 Desactivar' : '🟢 Activar'}</button>
+                            <button class="btn-danger" onclick="eliminarUsuario('${data.email}', '${data.uid}')">🗑️ Eliminar</button>
+                        </div>
+                    </div>
                 `;
             });
+            container.innerHTML = html;
         }
         
         async function cargarSesionesActivas() {
             const querySnapshot = await getDocs(collection(db, "sesiones_activas"));
-            const tbody = document.getElementById('tablaSesiones');
-            if (!tbody) return;
-            tbody.innerHTML = '';
+            const container = document.getElementById('sesionesContainer');
+            if (!container) return;
             
             if (querySnapshot.empty) {
-                tbody.innerHTML = '<tr><td colspan="4">No hay sesiones activas</td></tr>';
+                container.innerHTML = '<div class="empty">No hay sesiones activas</div>';
                 return;
             }
             
+            let html = '';
             querySnapshot.forEach((doc) => {
                 const data = doc.data();
-                const row = tbody.insertRow();
                 const ultimoAcceso = data.ultimoAcceso ? new Date(data.ultimoAcceso).toLocaleString() : 'Desconocido';
-                row.innerHTML = `
-                    <td>${doc.id}</td>
-                    <td>${data.huella ? data.huella.substring(0, 20) + '...' : '-'}</td>
-                    <td>${ultimoAcceso}</td>
-                    <td>
-                        <button onclick="forzarCierreSesion('${doc.id}')" style="padding:5px 10px; background:#e67e22; color:white; border:none; border-radius:5px; cursor:pointer">
-                            🔓 Forzar cierre
-                        </button>
-                    </td>
+                html += `
+                    <div class="session-card">
+                        <div class="user-field"><span class="label">📧 Email:</span> ${doc.id}</div>
+                        <div class="user-field"><span class="label">🖥️ Dispositivo:</span> <code>${data.huella ? data.huella.substring(0, 16) + '...' : '-'}</code></div>
+                        <div class="user-field"><span class="label">⏰ Último acceso:</span> ${ultimoAcceso}</div>
+                        <div class="user-actions">
+                            <button class="btn-orange" onclick="forzarCierreSesion('${doc.id}')">🔓 Forzar cierre</button>
+                        </div>
+                    </div>
                 `;
             });
+            container.innerHTML = html;
         }
         
         onAuthStateChanged(auth, (user) => {
@@ -215,71 +218,273 @@
         });
     </script>
     <style>
-        *{margin:0;padding:0;box-sizing:border-box}
-        body{font-family:Arial,sans-serif;background:#f0f2f5;padding:20px;max-width:1200px;margin:auto}
-        .panel{background:white;padding:25px;border-radius:12px;margin-bottom:20px;box-shadow:0 2px 10px rgba(0,0,0,0.1)}
-        h1{color:#0a1f4e;margin-bottom:20px}
-        h2{color:#0a1f4e;margin-bottom:15px;font-size:18px}
-        input,button{padding:10px;margin:5px;border-radius:8px}
-        input{border:1px solid #ddd;width:250px}
-        button{background:#0a1f4e;color:white;border:none;cursor:pointer}
-        button:hover{background:#c8a020}
-        table{width:100%;border-collapse:collapse;margin-top:15px}
-        th,td{border:1px solid #ddd;padding:10px;text-align:left}
-        th{background:#0a1f4e;color:white}
-        .admin-badge{background:#c8a020;color:#0a1f4e;padding:5px 10px;border-radius:5px;display:inline-block;margin-bottom:15px;font-weight:bold}
-        .logout-btn{background:#e74c3c;float:right;margin-bottom:15px}
-        code{background:#f0f0f0;padding:2px 5px;border-radius:4px;font-family:monospace}
-        textarea{background:#f8f9fc;border:1px solid #ddd;border-radius:8px;padding:10px;font-family:monospace;width:100%}
-        hr{margin:10px 0}
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: #f0f2f5;
+            padding: 16px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        /* Login */
+        .login-card {
+            background: white;
+            padding: 32px 24px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .login-card .logo {
+            font-size: 64px;
+            margin-bottom: 16px;
+        }
+        
+        .login-card h1 {
+            color: #0a1f4e;
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+        
+        .login-card p {
+            color: #666;
+            margin-bottom: 24px;
+            font-size: 14px;
+        }
+        
+        .login-card input {
+            width: 100%;
+            padding: 14px;
+            margin: 8px 0;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            font-size: 16px;
+        }
+        
+        .login-card button {
+            width: 100%;
+            padding: 14px;
+            background: #c8a020;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 16px;
+        }
+        
+        /* Panel Admin */
+        .admin-badge {
+            background: #c8a020;
+            color: #0a1f4e;
+            padding: 8px 16px;
+            border-radius: 20px;
+            display: inline-block;
+            font-weight: bold;
+            margin-bottom: 16px;
+        }
+        
+        .logout-btn {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 30px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-bottom: 16px;
+            width: 100%;
+        }
+        
+        .panel {
+            background: white;
+            padding: 20px;
+            border-radius: 16px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        
+        .panel h2 {
+            color: #0a1f4e;
+            font-size: 18px;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #c8a020;
+        }
+        
+        .panel input {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            font-size: 14px;
+        }
+        
+        .btn-primary {
+            background: #0a1f4e;
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 8px;
+        }
+        
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            font-size: 12px;
+            font-family: monospace;
+            background: #f8f9fc;
+            resize: vertical;
+        }
+        
+        /* Tarjetas de usuarios */
+        .user-card, .session-card {
+            background: #f8f9fc;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            border: 1px solid #e0e4ee;
+        }
+        
+        .user-field {
+            padding: 6px 0;
+            font-size: 14px;
+            word-break: break-all;
+        }
+        
+        .user-field .label {
+            font-weight: 600;
+            color: #0a1f4e;
+            min-width: 80px;
+            display: inline-block;
+        }
+        
+        .user-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+        
+        .btn-warning {
+            background: #e67e22;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            flex: 1;
+            min-width: 100px;
+        }
+        
+        .btn-danger {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            flex: 1;
+            min-width: 100px;
+        }
+        
+        .btn-orange {
+            background: #e67e22;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            width: 100%;
+        }
+        
+        .empty {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            background: #f8f9fc;
+            border-radius: 12px;
+        }
+        
+        code {
+            background: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+        }
+        
+        hr {
+            margin: 16px 0;
+            border: none;
+            border-top: 1px solid #e0e4ee;
+        }
+        
+        .info-text {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 12px;
+            padding: 8px;
+            background: #fff3e0;
+            border-radius: 8px;
+        }
     </style>
 </head>
 <body>
-    <h1>🏆 Panel de Administración - Mundial 2026</h1>
-    
-    <div id="loginPanel" class="panel">
-        <h2>🔐 Acceso Administrador</h2>
-        <input type="email" id="adminEmail" placeholder="Email admin">
-        <input type="password" id="adminPassword" placeholder="Contraseña">
-        <button onclick="loginAdmin()">Ingresar</button>
+    <!-- Pantalla de Login -->
+    <div id="loginPanel">
+        <div class="login-card">
+            <div class="logo">🏆</div>
+            <h1>Panel Admin</h1>
+            <p>Mundial 2026</p>
+            <input type="email" id="adminEmail" placeholder="Email admin">
+            <input type="password" id="adminPassword" placeholder="Contraseña">
+            <button onclick="loginAdmin()">🔐 Ingresar</button>
+        </div>
     </div>
     
+    <!-- Panel Admin (oculto hasta login) -->
     <div id="adminPanel" style="display:none">
         <div class="admin-badge">👑 MODO ADMINISTRADOR</div>
-        <button class="logout-btn" onclick="logoutAdmin()" style="float:right">🚪 Cerrar sesión</button>
-        <div style="clear:both"></div>
+        <button class="logout-btn" onclick="logoutAdmin()">🚪 Cerrar sesión</button>
         
+        <!-- Crear Usuario -->
         <div class="panel">
             <h2>➕ Crear Nuevo Usuario</h2>
             <input type="text" id="userNombre" placeholder="Nombre completo">
             <input type="email" id="userEmail" placeholder="Email del usuario">
-            <button onclick="crearUsuario()">✨ Crear usuario y contraseña</button>
+            <button class="btn-primary" onclick="crearUsuario()">✨ Crear usuario y contraseña</button>
             <div id="resultado"></div>
         </div>
         
+        <!-- Usuarios Autorizados -->
         <div class="panel">
             <h2>📋 Usuarios Autorizados</h2>
-            <table style="width:100%">
-                <thead>
-                    <tr><th>Nombre</th><th>Email</th><th>Estado</th><th>Fecha</th><th>Acciones</th></tr>
-                </thead>
-                <tbody id="tablaUsuarios">
-                    <tr><td colspan="5">Cargando...</td></tr>
-                </tbody>
-            </table>
+            <div id="usuariosContainer">Cargando...</div>
         </div>
         
+        <!-- Sesiones Activas -->
         <div class="panel">
             <h2>🔓 Sesiones Activas</h2>
-            <p style="font-size:12px; color:#666; margin-bottom:10px">Usa "Forzar cierre" si un usuario no puede iniciar sesión.</p>
-            <table style="width:100%">
-                <thead>
-                    <tr><th>Email</th><th>Dispositivo</th><th>Último acceso</th><th>Acción</th></tr>
-                </thead>
-                <tbody id="tablaSesiones">
-                    <tr><td colspan="4">Cargando...</td></tr>
-                </tbody>
-            </table>
+            <div class="info-text">⚠️ Usa "Forzar cierre" si un usuario no puede iniciar sesión</div>
+            <div id="sesionesContainer">Cargando...</div>
         </div>
     </div>
 </body>
