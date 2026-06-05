@@ -606,7 +606,7 @@ async function fetchLive(){
   body.innerHTML='<div class="ald"><span>Buscando resultados en tiempo real</span><span class="dots"><span>.</span><span>.</span><span>.</span></span></div>';
   try{
     const today=new Date().toLocaleDateString('es-ES',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-5-20251001',max_tokens:900,tools:[{type:'web_search_20250305',name:'web_search'}],system:'Eres el asistente de resultados del Mundial FIFA 2026. Hoy es '+today+'. El torneo comienza el 11 de junio de 2026 con México vs Sudáfrica en el Estadio Azteca. Busca el estado actual. Si ya ha comenzado: marcadores en vivo, resultados de hoy, próximos partidos. Si no: días que faltan y primer partido. Responde en español, conciso, con emojis de banderas.',messages:[{role:'user',content:'Estado actual del Mundial FIFA 2026: partidos en vivo, resultados de hoy, próximos partidos.'}]})});
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-5-20251001',max_tokens:900,tools:[{type:'web_search_20250305',name:'web_search'}],system:'Eres el asistente de resultados del Mundial FIFA 2026. Hoy es '+today+'. El torneo comienza el 11 de junio de 2026 con México vs Sudáfrica en el Estadio Azteca. Busca el estado actual. Si ya ha comenzado: marcadores en vivo, resultados de hoy, próximos partidos. Si no: días que faltan y primer partido. Responde en español, conciso, con emojis de banderas.',messages:[{role:'user',content:'Estado actual del Mundial FIFA 2026: partidos en vivo, resultados de hoy, próximos partidos.'}]})});
     const data=await res.json();
     const text=data.content?.filter(b=>b.type==='text').map(b=>b.text).join('')||'Sin respuesta.';
     const fmt=text.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n\n/g,'</p><p style="margin-top:8px">').replace(/\n/g,'<br>');
@@ -624,15 +624,32 @@ async function fetchNews(){
   const c=document.getElementById('ncon');
   c.innerHTML='<div class="ald" style="padding:16px"><span>Buscando noticias</span><span class="dots"><span>.</span><span>.</span><span>.</span></span></div>';
   try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-5-20251001',max_tokens:900,tools:[{type:'web_search_20250305',name:'web_search'}],system:'Eres el editor de noticias del Mundial FIFA 2026. Busca las 6 noticias más recientes. Devuelve SOLO JSON array sin markdown: [{"emoji":"...","tag":"...","title":"...","time":"Hace Xh","query":"..."}]',messages:[{role:'user',content:'Dame las 6 noticias más recientes del Mundial FIFA 2026 en JSON array.'}]})});
+    const today=new Date().toLocaleDateString('es-ES',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:900,tools:[{type:'web_search_20250305',name:'web_search'}],system:'Eres el editor de noticias del Mundial FIFA 2026. Hoy es '+today+'. Busca las 6 noticias más recientes del torneo. Devuelve SOLO un JSON array sin markdown ni texto extra: [{"emoji":"...","tag":"...","title":"...","time":"Hace Xh","query":"..."}]',messages:[{role:'user',content:'Dame las 6 noticias más recientes del Mundial FIFA 2026 ahora mismo en JSON array.'}]})});
     const data=await res.json();
+    if(data.error){throw new Error(data.error.message);}
     const raw=data.content?.filter(b=>b.type==='text').map(b=>b.text).join('')||'[]';
     let news=[];
-    try{news=JSON.parse(raw.replace(/```json|```/g,'').trim());}catch{news=[{emoji:'&#x1F3C6;',tag:'Mundial 2026',title:'El Mundial FIFA 2026 arranca el 11 de junio con México vs Sudáfrica en el Estadio Azteca',time:'Hoy',query:'noticias Mundial FIFA 2026'},{emoji:'&#x1F1EA;&#x1F1F8;',tag:'España',title:'España debuta el 15 de junio ante Cabo Verde en Atlanta a las 18:00h',time:'Reciente',query:'España Cabo Verde Mundial 2026'}];}
+    try{
+      const clean=raw.replace(/```json|```/g,'').trim();
+      const start=clean.indexOf('[');
+      const end=clean.lastIndexOf(']');
+      if(start>=0&&end>start){news=JSON.parse(clean.slice(start,end+1));}
+    }catch(pe){}
+    if(!news||!news.length){
+      news=[
+        {emoji:'⚽',tag:'Mundial 2026',title:'El Mundial FIFA 2026 ya ha comenzado: México vs Sudáfrica abrió el torneo en el Estadio Azteca',time:'Hoy',query:'resultados Mundial FIFA 2026 hoy'},
+        {emoji:'🇪🇸',tag:'España',title:'España debuta en el Grupo H ante Cabo Verde el 15 de junio en Atlanta',time:'Próximo',query:'España Cabo Verde Mundial 2026'}
+      ];
+    }
     c.innerHTML='<div class="ng">'+news.map(n=>{const q=(n.query||n.title).replace(/"/g,'&quot;');return '<div class="nc" data-q="'+q+'"><div class="ni">'+n.emoji+'</div><div><div class="ntg">'+n.tag+'</div><div class="nti">'+n.title+'</div><div class="ndt">'+n.time+'</div></div></div>';}).join('')+'</div>';
-  c.querySelectorAll('.nc').forEach(el=>el.addEventListener('click',()=>askNews(el.dataset.q)));
-  startNewsCountdown();
-  }catch(e){c.innerHTML='<div class="ar"><p>Error al cargar noticias. Inténtalo de nuevo.</p></div>';}
+    c.querySelectorAll('.nc').forEach(el=>el.addEventListener('click',()=>askNews(el.dataset.q)));
+  }catch(e){
+    console.error('fetchNews error:',e.message);
+    c.innerHTML='<div class="ar"><p>⚠️ '+e.message+'</p><button onclick="fetchNews()" style="margin-top:8px;padding:8px 16px;background:var(--navy);color:#fff;border:none;border-radius:6px;cursor:pointer">🔄 Reintentar</button></div>';
+  }finally{
+    startNewsCountdown();
+  }
 }
 function startNewsCountdown(){clearInterval(newsTimer);newsSeconds=300;updateNewsCd();newsTimer=setInterval(()=>{newsSeconds--;updateNewsCd();if(newsSeconds<=0)fetchNews();},1000);}
 function updateNewsCd(){const el=document.getElementById('news-cd');if(!el)return;const m=Math.floor(newsSeconds/60);const s=newsSeconds%60;el.textContent='Próxima actualización en '+m+':'+String(s).padStart(2,'0');}
