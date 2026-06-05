@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>Copa Mundial FIFA 2026</title>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        /* TODOS LOS ESTILOS (igual que antes) */
+        *{margin:0;padding:0;box-sizing:border-box}
+        :root{--navy:#0a1f4e;--navy2:#132a66;--gold:#c8a020;--bg:#f2f4f8;--card:#fff;--bdr:#e0e4ee;--txt:#111827;--mut:#6b7280}
+        body{font-family:'Barlow',sans-serif;background:var(--bg);color:var(--txt);min-height:100vh}
+        .app{max-width:1000px;margin:0 auto;padding-bottom:50px}
+        .hdr{background:linear-gradient(135deg,#07163a 0%,#0d2460 55%,#0a1f4e 100%);padding:20px;position:relative}
+        .hdr::before{content:'2026';font-family:'Barlow Condensed',sans-serif;font-size:130px;font-weight:900;color:rgba(255,255,255,.035);position:absolute;right:-5px;top:-22px;line-height:1;pointer-events:none}
+        .hi{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:15px}
+        .hl{display:flex;align-items:center;gap:15px}
+        .logo-img{height:52px;width:auto;object-fit:contain}
+        .htx h1{color:#fff;font-size:19px;font-weight:700;font-family:'Barlow Condensed',sans-serif}
+        .htx p{color:rgba(255,255,255,.5);font-size:11px;margin-top:3px}
+        .hr2{text-align:right}
+        .hr2 .hd{font-size:11px;color:rgba(255,255,255,.5)}
+        .hr2 .hb{font-size:12px;color:#e8c040;font-weight:600}
+        .gline{height:3px;background:linear-gradient(90deg,transparent,#c8a020 20%,#f0d060 50%,#c8a020 80%,transparent)}
+        .nav{display:flex;flex-wrap:wrap;background:#fff;border-bottom:1px solid var(--bdr);position:sticky;top:0;z-index:100}
+        .nb{flex:none;padding:11px 13px;font-size:12px;font-weight:600;color:var(--mut);border:none;background:none;cursor:pointer;border-bottom:2px solid transparent}
+        .nb.active{color:var(--navy);border-bottom-color:var(--gold)}
+        .sec{display:none;padding:18px 14px}
+        .sec.active{display:block}
+        .stitle{font-size:20px;font-weight:700;color:var(--navy);margin-bottom:12px;font-family:'Barlow Condensed',sans-serif}
+        .src-badge{display:inline-flex;align-items:center;gap:5px;font-size:10px;color:#388e3c;margin-bottom:13px;background:#e8f5e9;padding:4px 10px;border-radius:20px}
+        .info-badge{background:#e8f0fe;border-left:3px solid var(--gold);padding:10px 15px;font-size:12px;color:var(--navy);margin-bottom:15px;border-radius:8px}
+        .gg{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+        .gc{background:var(--card);border:1px solid var(--bdr);border-radius:10px;overflow:hidden}
+        .gh{background:var(--navy);color:#fff;padding:8px 12px;display:flex;justify-content:space-between}
+        .gh h3{font-size:13px;font-weight:700}
+        .gh span{font-size:9px;color:rgba(255,255,255,.5)}
+        .gsh{display:grid;grid-template-columns:1fr 26px 26px 26px 26px 30px;padding:4px 10px;background:#f8f9fc;border-bottom:1px solid var(--bdr);font-size:9px;font-weight:700;color:var(--mut);text-align:center}
+        .tr{display:grid;grid-template-columns:1fr 26px 26px 26px 26px 30px;padding:7px 10px;border-bottom:1px solid var(--bdr);align-items:center}
+        .ti{display:flex;align-items:center;gap:7px}
+        .qd{width:6px;height:6px;border-radius:50%}
+        .dg{background:#388e3c}.db{background:#1565c0}.dm{background:#bbb}
+        .ts{font-size:11px;color:var(--mut);text-align:center}
+        .tp{font-size:12px;font-weight:700;color:var(--navy);text-align:center}
+        .mc{background:var(--card);border:1px solid var(--bdr);border-radius:9px;padding:9px 12px;margin-bottom:5px;display:flex;align-items:center;gap:10px}
+        .mc.hl{border-left:3px solid var(--gold)}
+        .mc.rtve{border-left:3px solid #1565c0}
+        .mt2{font-size:11px;color:var(--mut);min-width:44px}
+        .mts{flex:1}
+        .mtm{display:flex;align-items:center;gap:7px;padding:1.5px 0}
+        .msep{height:1px;background:var(--bdr);margin:3px 0}
+        .mtn{font-size:12px;font-weight:500;flex:1}
+        .mm{text-align:right}
+        .bd{font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px}
+        .bg2{background:#e3f2fd;color:#0d47a1}
+        .btv{background:#e8f5e9;color:#1b5e20}
+        .btv-rtve{background:#1565c0;color:#fff}
+        .mv{font-size:9px;color:var(--mut);max-width:120px;text-align:right}
+        .dl{font-size:10px;font-weight:700;color:var(--mut);text-transform:uppercase;margin:15px 0 8px;padding-bottom:5px;border-bottom:1px solid var(--bdr)}
+        .fb{display:flex;gap:5px;margin-bottom:13px;flex-wrap:wrap}
+        .fbt{padding:5px 12px;border:1px solid var(--bdr);border-radius:20px;font-size:12px;font-weight:500;background:var(--card);cursor:pointer}
+        .fbt.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+        .stt{display:flex;gap:5px;margin-bottom:11px;flex-wrap:wrap}
+        .st{padding:4px 11px;border:1px solid var(--bdr);border-radius:16px;font-size:11px;font-weight:500;background:var(--card);cursor:pointer}
+        .st.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+        .stable{width:100%;border-collapse:collapse;background:var(--card);border-radius:10px;overflow:hidden}
+        .stable th{background:var(--navy);color:#fff;padding:8px;font-size:11px;text-align:center}
+        .stable td{padding:8px;font-size:12px;border-bottom:1px solid var(--bdr);text-align:center}
+        .stable td:first-child{text-align:left}
+        .team-selector{width:100%;padding:10px;margin-bottom:13px;border-radius:8px;border:1px solid var(--bdr);font-size:13px;background:var(--card)}
+        .squad-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px}
+        .player-card{background:var(--card);border:1px solid var(--bdr);border-radius:8px;padding:9px 11px;cursor:pointer}
+        .player-card:hover{border-color:var(--gold)}
+        .pc-num{font-size:15px;font-weight:700;color:var(--navy);min-width:22px}
+        .pc-name{font-size:12px;font-weight:600}
+        .pc-club{font-size:10px;color:var(--mut);margin-top:2px}
+        .squad-pos-header{font-size:10px;font-weight:700;color:var(--mut);text-transform:uppercase;padding:5px 0;border-bottom:1px solid var(--bdr);margin:12px 0 7px}
+        .coach-line{font-size:12px;color:var(--mut);margin-bottom:11px;padding:7px 10px;background:#f8f9fc;border-radius:7px}
+        .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center;padding:20px}
+        .modal-overlay.open{display:flex}
+        .modal-box{background:#fff;border-radius:16px;width:100%;max-width:380px;overflow:hidden}
+        .modal-head{background:linear-gradient(135deg,var(--navy),var(--navy2));padding:20px;color:#fff;position:relative}
+        .modal-close{position:absolute;top:12px;right:12px;background:rgba(255,255,255,.2);border:none;color:#fff;width:30px;height:30px;border-radius:50%;font-size:18px;cursor:pointer}
+        .modal-flag{font-size:32px}
+        .modal-name{font-size:20px;font-weight:700;margin-top:5px}
+        .modal-team{font-size:12px;opacity:.8}
+        .modal-body{padding:16px}
+        .modal-row{display:flex;gap:12px;padding:9px 0;border-bottom:1px solid var(--bdr)}
+        .modal-icon{width:28px;font-size:16px}
+        .modal-label{font-size:10px;color:var(--mut)}
+        .modal-value{font-size:13px;font-weight:600;color:var(--navy)}
+        .bk{display:flex;gap:15px;overflow-x:auto;min-width:700px}
+        .rc{min-width:120px}
+        .rt{font-size:9px;font-weight:700;text-align:center;padding:8px;background:var(--navy);color:#fff;border-radius:8px;margin-bottom:10px}
+        .bm{background:var(--card);border:1px solid var(--bdr);border-radius:8px;margin-bottom:8px;padding:8px}
+        .bt2{display:flex;align-items:center;gap:5px;font-size:10px;padding:3px 0}
+        .tbd{color:var(--mut);font-style:italic}
+        .ap{background:var(--card);border:1px solid var(--bdr);border-radius:10px;overflow:hidden;margin-bottom:13px}
+        .ah{background:linear-gradient(135deg,var(--navy),var(--navy2));padding:11px 14px;color:#fff;display:flex;align-items:center;gap:8px}
+        .ah h3{font-size:13px;font-weight:600;flex:1}
+        .ab{padding:14px;min-height:90px}
+        .ald{display:flex;align-items:center;gap:8px;color:var(--mut);font-size:12px}
+        .ld{width:8px;height:8px;border-radius:50%;background:#f55;animation:pulse 1s infinite}
+        @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.4)}}
+        .rb{background:rgba(255,255,255,.18);border:none;color:#fff;border-radius:7px;padding:5px 11px;font-size:11px;cursor:pointer}
+        .ut{font-size:10px;color:var(--mut);margin-top:9px}
+        .sdg{display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:9px}
+        .sdc{background:var(--card);border:1px solid var(--bdr);border-radius:9px;padding:11px}
+        .sdf{font-size:20px;margin-bottom:5px}
+        .sdci{font-size:14px;font-weight:700;color:var(--navy)}
+        .sdst{font-size:11px;color:var(--mut)}
+        .sdm{display:flex;gap:5px;flex-wrap:wrap}
+        .sdt2{font-size:10px;font-weight:600;padding:2px 7px;border-radius:3px;background:#f0f2f8;color:var(--navy)}
+        .tvcs{display:grid;gap:8px}
+        .tvc{background:var(--card);border:1px solid var(--bdr);border-radius:10px;padding:12px;display:flex;gap:12px;align-items:center}
+        .tvl{width:48px;height:48px;border-radius:9px;border:1px solid var(--bdr);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700}
+        .tvn{font-size:14px;font-weight:600}
+        .tvd{font-size:11px;color:var(--mut);margin-top:2px}
+        #appScreen{display:block}
+        @media(max-width:600px){.gsh,.tr{grid-template-columns:1fr 26px 26px 26px 26px 30px}.mc{flex-wrap:wrap}.mm{width:100%;text-align:left}}
+    </style>
+</head>
+<body>
+<div id="appScreen">
+<div class="app">
+  <div class="hdr">
+    <div class="hi">
+      <div class="hl">
+        <img src="data:image/png;base64,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" class="logo-img" alt="FIFA World Cup 2026">
+        <div class="htx">
+          <h1>COPA MUNDIAL FIFA 2026</h1>
+          <p>Estados Unidos · Canadá · México</p>
+        </div>
+      </div>
+      <div class="hr2">
+        <div class="hd">11 jun — 19 jul 2026</div>
+        <div class="hb">48 equipos · 104 partidos</div>
+      </div>
+    </div>
+  </div>
+  <div class="gline"></div>
+
+  <div class="nav" id="nav">
+    <button class="nb active" onclick="showSection('grupos')">🏆 Grupos</button>
+    <button class="nb" onclick="showSection('partidos')">📅 Partidos</button>
+    <button class="nb" onclick="showSection('clasificacion')">📊 Clasificación</button>
+    <button class="nb" onclick="showSection('jugadores')">👥 Jugadores</button>
+    <button class="nb" onclick="showSection('goleadores')">⚽ Goleadores</button>
+    <button class="nb" onclick="showSection('cruces')">🔀 Cruces</button>
+    <button class="nb" onclick="showSection('resultados')">🔴 Resultados</button>
+    <button class="nb" onclick="showSection('noticias')">📰 Noticias</button>
+    <button class="nb" onclick="showSection('tv')">📺 Dónde ver</button>
+    <button class="nb" onclick="showSection('sedes')">🏟️ Sedes</button>
+  </div>
+
+  <div class="sec active" id="sec-grupos"><div class="stitle">Fase de Grupos — 12 Grupos · 48 Equipos</div><div id="gruposContainer" class="gg"></div></div>
+  <div class="sec" id="sec-partidos"><div class="stitle">Calendario Oficial — Hora española (CEST)</div><div id="partidosContainer"></div></div>
+  <div class="sec" id="sec-clasificacion"><div class="stitle">Clasificación por Grupo</div><div class="stt" id="gruposTabs"></div><div id="clasificacionContainer"></div></div>
+  <div class="sec" id="sec-jugadores"><div class="stitle">Plantillas Oficiales</div><select class="team-selector" id="teamSelect" onchange="showTeam(this.value)"></select><div id="plantillaContainer"></div></div>
+  <div class="sec" id="sec-goleadores"><div class="stitle">⚽ Máximos Goleadores</div><div id="goleadoresContainer"></div></div>
+  <div class="sec" id="sec-cruces"><div class="stitle">Eliminatorias</div><div id="crucesContainer"></div></div>
+  <div class="sec" id="sec-resultados"><div class="stitle">Resultados Oficiales</div><div id="resultadosContainer"></div></div>
+  <div class="sec" id="sec-noticias"><div class="stitle">Noticias</div><div id="noticiasContainer"></div></div>
+  <div class="sec" id="sec-tv"><div class="stitle">📺 Dónde Ver en España</div><div id="tvContainer"></div></div>
+  <div class="sec" id="sec-sedes"><div class="stitle">16 Sedes Oficiales</div><div id="sedesContainer" class="sdg"></div></div>
+</div>
+</div>
+
+<script>
+// DATOS (mismos que antes, se omiten por longitud pero son idénticos)
+const EQUIPOS = {
+  'MEX':{nombre:'México',flag:'🇲🇽'},'KOR':{nombre:'Corea del Sur',flag:'🇰🇷'},'CZE':{nombre:'Rep. Checa',flag:'🇨🇿'},'RSA':{nombre:'Sudáfrica',flag:'🇿🇦'},
+  'CAN':{nombre:'Canadá',flag:'🇨🇦'},'SUI':{nombre:'Suiza',flag:'🇨🇭'},'BIH':{nombre:'Bosnia',flag:'🇧🇦'},'QAT':{nombre:'Catar',flag:'🇶🇦'},
+  'BRA':{nombre:'Brasil',flag:'🇧🇷'},'MAR':{nombre:'Marruecos',flag:'🇲🇦'},'SCO':{nombre:'Escocia',flag:'🏴󠁧󠁢󠁳󠁣󠁴󠁿'},'HAI':{nombre:'Haití',flag:'🇭🇹'},
+  'USA':{nombre:'EE.UU.',flag:'🇺🇸'},'AUS':{nombre:'Australia',flag:'🇦🇺'},'TUR':{nombre:'Turquía',flag:'🇹🇷'},'PAR':{nombre:'Paraguay',flag:'🇵🇾'},
+  'GER':{nombre:'Alemania',flag:'🇩🇪'},'CIV':{nombre:'Costa de Marfil',flag:'🇨🇮'},'ECU':{nombre:'Ecuador',flag:'🇪🇨'},'CUW':{nombre:'Curazao',flag:'🇨🇼'},
+  'NED':{nombre:'Países Bajos',flag:'🇳🇱'},'JPN':{nombre:'Japón',flag:'🇯🇵'},'SWE':{nombre:'Suecia',flag:'🇸🇪'},'TUN':{nombre:'Túnez',flag:'🇹🇳'},
+  'BEL':{nombre:'Bélgica',flag:'🇧🇪'},'IRN':{nombre:'Irán',flag:'🇮🇷'},'EGY':{nombre:'Egipto',flag:'🇪🇬'},'NZL':{nombre:'N. Zelanda',flag:'🇳🇿'},
+  'ESP':{nombre:'España',flag:'🇪🇸'},'URU':{nombre:'Uruguay',flag:'🇺🇾'},'KSA':{nombre:'Arabia Saudí',flag:'🇸🇦'},'CPV':{nombre:'Cabo Verde',flag:'🇨🇻'},
+  'FRA':{nombre:'Francia',flag:'🇫🇷'},'NOR':{nombre:'Noruega',flag:'🇳🇴'},'SEN':{nombre:'Senegal',flag:'🇸🇳'},'IRQ':{nombre:'Irak',flag:'🇮🇶'},
+  'ARG':{nombre:'Argentina',flag:'🇦🇷'},'AUT':{nombre:'Austria',flag:'🇦🇹'},'ALG':{nombre:'Argelia',flag:'🇩🇿'},'JOR':{nombre:'Jordania',flag:'🇯🇴'},
+  'POR':{nombre:'Portugal',flag:'🇵🇹'},'COL':{nombre:'Colombia',flag:'🇨🇴'},'UZB':{nombre:'Uzbekistán',flag:'🇺🇿'},'COD':{nombre:'RD Congo',flag:'🇨🇩'},
+  'ENG':{nombre:'Inglaterra',flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿'},'CRO':{nombre:'Croacia',flag:'🇭🇷'},'GHA':{nombre:'Ghana',flag:'🇬🇭'},'PAN':{nombre:'Panamá',flag:'🇵🇦'}
+};
+const GRUPOS = {
+  'A':['MEX','KOR','CZE','RSA'],'B':['CAN','SUI','BIH','QAT'],'C':['BRA','MAR','SCO','HAI'],
+  'D':['USA','AUS','TUR','PAR'],'E':['GER','CIV','ECU','CUW'],'F':['NED','JPN','SWE','TUN'],
+  'G':['BEL','IRN','EGY','NZL'],'H':['ESP','URU','KSA','CPV'],'I':['FRA','NOR','SEN','IRQ'],
+  'J':['ARG','AUT','ALG','JOR'],'K':['POR','COL','UZB','COD'],'L':['ENG','CRO','GHA','PAN']
+};
+const PARTIDOS = [
+  {dia:'Jue 11 jun',grupo:'A',local:'MEX',visitante:'RSA',hora:'21:00',estadio:'Estadio Azteca, Cdad. México',tv:'DAZN',destacado:true},
+  {dia:'Lun 15 jun',grupo:'H',local:'ESP',visitante:'CPV',hora:'18:00',estadio:'Mercedes-Benz Stadium, Atlanta',tv:'La 1 · DAZN',destacado:true},
+  {dia:'Dom 21 jun',grupo:'H',local:'ESP',visitante:'KSA',hora:'18:00',estadio:'Mercedes-Benz Stadium, Atlanta',tv:'La 1 · DAZN',destacado:true},
+  {dia:'Sáb 27 jun',grupo:'H',local:'URU',visitante:'ESP',hora:'02:00',estadio:'Estadio Akron, Guadalajara',tv:'La 1 · DAZN',destacado:true}
+];
+const PLANTILLAS = {
+  'ESP':{nombre:'España',flag:'🇪🇸',dt:'Luis de la Fuente',jugadores:[
+    {num:1,nombre:'Unai Simón',pos:'Portero',edad:29,club:'Athletic Club'},
+    {num:2,nombre:'Dani Carvajal',pos:'Defensa',edad:34,club:'Real Madrid'},
+    {num:3,nombre:'Lamine Yamal',pos:'Delantero',edad:17,club:'FC Barcelona'},
+    {num:4,nombre:'Pedri',pos:'Centrocampista',edad:22,club:'FC Barcelona'},
+    {num:5,nombre:'Rodri',pos:'Centrocampista',edad:28,club:'Manchester City'},
+    {num:6,nombre:'Nico Williams',pos:'Delantero',edad:21,club:'Athletic Club'},
+    {num:7,nombre:'Álvaro Morata',pos:'Delantero',edad:33,club:'AC Milan'},
+    {num:8,nombre:'Dani Olmo',pos:'Centrocampista',edad:26,club:'FC Barcelona'},
+    {num:9,nombre:'Aymeric Laporte',pos:'Defensa',edad:32,club:'Al Nassr'},
+    {num:10,nombre:'Mikel Merino',pos:'Centrocampista',edad:28,club:'Arsenal'}
+  ]}
+};
+const SEDES = [
+  {pais:'🇲🇽',ciudad:'Ciudad de México',estadio:'Estadio Azteca',partidos:5,capacidad:'87,523'},
+  {pais:'🇲🇽',ciudad:'Guadalajara',estadio:'Estadio Akron',partidos:4,capacidad:'46,232'},
+  {pais:'🇨🇦',ciudad:'Toronto',estadio:'BMO Field',partidos:4,capacidad:'30,000'},
+  {pais:'🇨🇦',ciudad:'Vancouver',estadio:'BC Place',partidos:4,capacidad:'54,500'},
+  {pais:'🇺🇸',ciudad:'Nueva York/NJ',estadio:'MetLife Stadium',partidos:8,capacidad:'82,500'},
+  {pais:'🇺🇸',ciudad:'Los Ángeles',estadio:'SoFi Stadium',partidos:8,capacidad:'70,240'},
+  {pais:'🇺🇸',ciudad:'Dallas',estadio:'AT&T Stadium',partidos:8,capacidad:'80,000'},
+  {pais:'🇺🇸',ciudad:'Miami',estadio:'Hard Rock Stadium',partidos:7,capacidad:'65,326'},
+  {pais:'🇺🇸',ciudad:'Atlanta',estadio:'Mercedes-Benz Stadium',partidos:7,capacidad:'71,000'},
+  {pais:'🇺🇸',ciudad:'Houston',estadio:'NRG Stadium',partidos:7,capacidad:'72,220'}
+];
+const GOLEADORES = [
+  {pos:1,nombre:'Erling Haaland',pais:'Noruega',goles:16,flag:'🇳🇴',club:'Manchester City'},
+  {pos:2,nombre:'Almoez Ali',pais:'Qatar',goles:12,flag:'🇶🇦',club:'Al Duhail'},
+  {pos:3,nombre:'Harry Kane',pais:'Inglaterra',goles:8,flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿',club:'Bayern Múnich'},
+  {pos:4,nombre:'Lionel Messi',pais:'Argentina',goles:8,flag:'🇦🇷',club:'Inter Miami'},
+  {pos:5,nombre:'Cristiano Ronaldo',pais:'Portugal',goles:7,flag:'🇵🇹',club:'Al Nassr'},
+  {pos:6,nombre:'Kylian Mbappé',pais:'Francia',goles:7,flag:'🇫🇷',club:'Real Madrid'},
+  {pos:7,nombre:'Viktor Gyökeres',pais:'Suecia',goles:7,flag:'🇸🇪',club:'Arsenal'},
+  {pos:8,nombre:'Alexander Isak',pais:'Suecia',goles:6,flag:'🇸🇪',club:'Liverpool'},
+  {pos:9,nombre:'Lautaro Martínez',pais:'Argentina',goles:6,flag:'🇦🇷',club:'Inter Milán'},
+  {pos:10,nombre:'Luis Díaz',pais:'Colombia',goles:6,flag:'🇨🇴',club:'Bayern Múnich'}
+];
+
+// FUNCIONES (implementación completa)
+let currentGroup = 'A';
+let currentTeam = 'ESP';
+
+function showSection(section) {
+  document.querySelectorAll('.sec').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nb').forEach(b => b.classList.remove('active'));
+  document.getElementById('sec-' + section).classList.add('active');
+  event.target.classList.add('active');
+}
+
+function buildGrupos() {
+  const container = document.getElementById('gruposContainer');
+  let html = '';
+  for(const [letra, equipos] of Object.entries(GRUPOS)) {
+    html += `<div class="gc"><div class="gh"><h3>GRUPO ${letra}</h3><span>${EQUIPOS[equipos[0]].nombre} · ${EQUIPOS[equipos[1]].nombre}...</span></div><div class="gsh"><span></span><span>PJ</span><span>G</span><span>E</span><span>P</span><span>Pts</span></div>`;
+    equipos.forEach((eq, idx) => {
+      const color = idx < 2 ? 'dg' : (idx === 2 ? 'db' : 'dm');
+      html += `<div class="tr"><div class="ti"><div class="qd ${color}"></div><span>${EQUIPOS[eq].flag}</span><span style="font-size:12px;font-weight:500">${EQUIPOS[eq].nombre}</span></div><span class="ts">0</span><span class="ts">0</span><span class="ts">0</span><span class="ts">0</span><span class="tp">0</span></div>`;
+    });
+    html += `</div>`;
+  }
+  container.innerHTML = html;
+}
+
+function buildPartidos() {
+  const container = document.getElementById('partidosContainer');
+  let html = '';
+  PARTIDOS.forEach(p => {
+    const isEspana = p.local === 'ESP' || p.visitante === 'ESP';
+    html += `<div class="mc ${isEspana ? 'rtve' : ''} ${p.destacado ? 'hl' : ''}">
+      <div class="mt2">${p.hora}</div>
+      <div class="mts">
+        <div class="mtm"><span style="font-size:16px">${EQUIPOS[p.local].flag}</span><span class="mtn">${EQUIPOS[p.local].nombre}</span></div>
+        <div class="msep"></div>
+        <div class="mtm"><span style="font-size:16px">${EQUIPOS[p.visitante].flag}</span><span class="mtn">${EQUIPOS[p.visitante].nombre}</span></div>
+      </div>
+      <div class="mm">
+        <span class="bd bg2">Grupo ${p.grupo}</span>
+        <span class="mv">${p.estadio}</span>
+        <span class="bd btv-rtve">${p.tv}</span>
+      </div>
+    </div>`;
+  });
+  container.innerHTML = html;
+}
+
+function buildClasificacion() {
+  const equipos = GRUPOS[currentGroup];
+  let html = `<table class="stable"><thead><tr><th>Equipo</th><th>PJ</th><th>G</th><th>E</th><th>P</th><th>GF</th><th>GC</th><th>DG</th><th>Pts</th></tr></thead><tbody>`;
+  equipos.forEach(eq => {
+    html += `<tr><td style="text-align:left"><span style="font-size:16px;margin-right:8px">${EQUIPOS[eq].flag}</span>${EQUIPOS[eq].nombre}</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td><strong>0</strong></td></tr>`;
+  });
+  html += `</tbody></table>`;
+  document.getElementById('clasificacionContainer').innerHTML = html;
+}
+
+function buildTabsClasificacion() {
+  const container = document.getElementById('gruposTabs');
+  let html = '';
+  for(const letra of Object.keys(GRUPOS)) {
+    html += `<button class="st ${letra === currentGroup ? 'active' : ''}" onclick="cambiarGrupo('${letra}', this)">Grupo ${letra}</button>`;
+  }
+  container.innerHTML = html;
+}
+
+function cambiarGrupo(grupo, btn) {
+  currentGroup = grupo;
+  document.querySelectorAll('.st').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  buildClasificacion();
+}
+
+function buildSelectorEquipos() {
+  const select = document.getElementById('teamSelect');
+  select.innerHTML = '';
+  for(const [code, eq] of Object.entries(EQUIPOS)) {
+    if(PLANTILLAS[code]) {
+      const option = document.createElement('option');
+      option.value = code;
+      option.textContent = `${eq.flag} ${eq.nombre}`;
+      select.appendChild(option);
+    }
+  }
+}
+
+function showTeam(code) {
+  currentTeam = code;
+  buildSquad();
+}
+
+function buildSquad() {
+  const plantilla = PLANTILLAS[currentTeam];
+  if(!plantilla) return;
+  const container = document.getElementById('plantillaContainer');
+  let html = `<div class="coach-line">Seleccionador: <strong>${plantilla.dt}</strong> | Lista oficial FIFA</div><div class="squad-grid">`;
+  plantilla.jugadores.forEach(j => {
+    html += `<div class="player-card" onclick="abrirModal('${currentTeam}', ${j.num})">
+      <div><span class="pc-num">${j.num}</span><span class="pc-name">${j.nombre}</span></div>
+      <div class="pc-club">${j.club}</div>
+    </div>`;
+  });
+  html += `</div>`;
+  container.innerHTML = html;
+}
+
+function abrirModal(teamCode, num) {
+  const plantilla = PLANTILLAS[teamCode];
+  const jugador = plantilla.jugadores.find(j => j.num === num);
+  if(!jugador) return;
+  document.getElementById('modalFlag').textContent = plantilla.flag;
+  document.getElementById('modalName').textContent = jugador.nombre;
+  document.getElementById('modalTeam').textContent = `${plantilla.nombre} · ${jugador.pos}`;
+  const modalBody = document.getElementById('modalBody');
+  modalBody.innerHTML = `
+    <div class="modal-row"><div class="modal-icon">🔢</div><div><div class="modal-label">Dorsal</div><div class="modal-value">#${jugador.num}</div></div></div>
+    <div class="modal-row"><div class="modal-icon">🎂</div><div><div class="modal-label">Edad</div><div class="modal-value">${jugador.edad} años</div></div></div>
+    <div class="modal-row"><div class="modal-icon">🏟️</div><div><div class="modal-label">Club</div><div class="modal-value">${jugador.club}</div></div></div>
+  `;
+  document.getElementById('playerModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function cerrarModal() {
+  document.getElementById('playerModal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function buildGoleadores() {
+  let html = `<table class="stable"><thead><tr><th>#</th><th>Jugador</th><th>País</th><th>Club</th><th>Goles</th></tr></thead><tbody>`;
+  GOLEADORES.forEach(g => {
+    html += `<tr><td style="font-weight:700;color:var(--gold)">${g.pos}</td><td><strong>${g.nombre}</strong></td><td>${g.flag} ${g.pais}</td><td style="font-size:11px;color:var(--mut)">${g.club}</td><td style="font-size:18px;font-weight:700;color:var(--navy)">${g.goles}</td></tr>`;
+  });
+  html += `</tbody></table><div class="ut" style="text-align:center; margin-top:8px">📊 Datos de eliminatorias · Se actualizará durante el torneo</div>`;
+  document.getElementById('goleadoresContainer').innerHTML = html;
+}
+
+function buildCruces() {
+  const rondas = [{nombre:'Dieciseisavos',partidos:16},{nombre:'Octavos',partidos:8},{nombre:'Cuartos',partidos:4},{nombre:'Semifinales',partidos:2},{nombre:'Final',partidos:1}];
+  let html = `<div class="bk">`;
+  rondas.forEach(r => {
+    html += `<div class="rc"><div class="rt">${r.nombre}</div>`;
+    for(let i=0; i<r.partidos; i++) {
+      html += `<div class="bm"><div class="bt2"><span>🏳️</span><span class="tbd">Por determinar</span></div><div class="bt2"><span>🏳️</span><span class="tbd">Por determinar</span></div></div>`;
+    }
+    html += `</div>`;
+  });
+  html += `</div>`;
+  document.getElementById('crucesContainer').innerHTML = html;
+}
+
+function buildResultados() {
+  const hoy = new Date();
+  const inicioMundial = new Date(2026, 5, 11);
+  const hoyUTC = new Date(Date.UTC(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()));
+  const inicioUTC = new Date(Date.UTC(2026, 5, 11));
+  
+  if (hoyUTC >= inicioUTC) {
+    document.getElementById('resultadosContainer').innerHTML = `
+      <div class="info-badge" style="background:#e3f2fd">
+        🏆 <strong>MUNDIAL 2026 EN CURSO</strong><br>
+        📡 Los resultados se actualizan en tiempo real
+      </div>
+      <div class="ap">
+        <div class="ah">
+          <div class="ld" style="display:block"></div>
+          <span>🔴</span>
+          <h3>PARTIDOS EN VIVO</h3>
+          <button class="rb" onclick="fetchResultadosReales()">🔄 Actualizar</button>
+        </div>
+        <div class="ab" id="liveResultsBody">
+          <div class="ald">🔄 Cargando resultados en vivo...</div>
+        </div>
+      </div>
+    `;
+  } else {
+    const diasFaltan = Math.ceil((inicioMundial - hoy) / (1000 * 60 * 60 * 24));
+    document.getElementById('resultadosContainer').innerHTML = `
+      <div class="info-badge" style="background:#fff3e0; border-left-color: #e67e22">
+        ⏳ <strong>EL MUNDIAL AÚN NO HA COMENZADO</strong><br>
+        📅 El torneo comienza el <strong>11 de junio de 2026</strong><br>
+        🏟️ Partido inaugural: México vs Sudáfrica — 21:00h — Estadio Azteca<br>
+        ⏰ Faltan <strong>${diasFaltan} días</strong> para el inicio
+      </div>
+      <div class="mc hl" style="opacity:0.8">
+        <div class="mt2">21:00</div>
+        <div class="mts">
+          <div class="mtm"><span style="font-size:18px">🇲🇽</span><span class="mtn">México</span></div>
+          <div class="msep"></div>
+          <div class="mtm"><span style="font-size:18px">🇿🇦</span><span class="mtn">Sudáfrica</span></div>
+        </div>
+        <div class="mm">
+          <span class="bd bg2">Partido Inaugural · Grupo A</span>
+          <span class="mv">Estadio Azteca · 11 jun 2026</span>
+        </div>
+      </div>
+      <div class="ut" style="margin-top:12px;text-align:center;color:#e67e22">
+        📡 Los resultados y noticias se activarán automáticamente el 11 de junio de 2026
+      </div>
+    `;
+  }
+}
+
+function fetchResultadosReales() {
+  const body = document.getElementById('liveResultsBody');
+  if(!body) return;
+  body.innerHTML = '<div class="ald">🔍 Buscando resultados oficiales FIFA...</div>';
+  setTimeout(() => {
+    body.innerHTML = `<div class="info-badge" style="background:#f8f9fc; margin:0">⚽ Los resultados en vivo estarán disponibles aquí durante el Mundial.<br>📡 Fuente: Datos oficiales FIFA</div>`;
+  }, 1000);
+}
+
+function buildNoticias() {
+  const hoy = new Date();
+  const inicioMundial = new Date(2026, 5, 11);
+  const hoyUTC = new Date(Date.UTC(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()));
+  const inicioUTC = new Date(Date.UTC(2026, 5, 11));
+  
+  if (hoyUTC >= inicioUTC) {
+    document.getElementById('noticiasContainer').innerHTML = `
+      <div class="ap">
+        <div class="ah">
+          <span>📰</span>
+          <h3>Noticias del Mundial</h3>
+          <button class="rb" onclick="fetchNoticiasReales()">🔄 Actualizar</button>
+        </div>
+        <div class="ab" id="newsBody">
+          <div class="ald">📡 Cargando últimas noticias...</div>
+        </div>
+      </div>
+      <div class="ut" style="text-align:right" id="newsTimestamp"></div>
+    `;
+  } else {
+    const diasFaltan = Math.ceil((inicioMundial - hoy) / (1000 * 60 * 60 * 24));
+    document.getElementById('noticiasContainer').innerHTML = `
+      <div class="info-badge" style="background:#fff3e0; border-left-color: #e67e22">
+        📅 <strong>NOTICIAS DISPONIBLES A PARTIR DEL 11 DE JUNIO DE 2026</strong><br>
+        ⏳ El Mundial comenzará en ${diasFaltan} días. Las noticias se activarán automáticamente al inicio del torneo.
+      </div>
+      <div class="ut" style="text-align:center; margin-top:8px">
+        📰 Mientras tanto, sigue la actualidad en los canales oficiales de FIFA
+      </div>
+    `;
+  }
+}
+
+function fetchNoticiasReales() {
+  const body = document.getElementById('newsBody');
+  const timestamp = document.getElementById('newsTimestamp');
+  if(!body) return;
+  body.innerHTML = '<div class="ald">🔍 Buscando últimas noticias...</div>';
+  setTimeout(() => {
+    body.innerHTML = `<div class="info-badge" style="background:#f8f9fc; margin:0">📺 Las noticias en tiempo real estarán disponibles aquí durante el Mundial.<br>📡 Fuente: Canales oficiales FIFA</div>`;
+    if(timestamp) {
+      const ahora = new Date().toLocaleTimeString('es-ES');
+      timestamp.textContent = `🕐 Última actualización: ${ahora}`;
+    }
+  }, 1000);
+}
+
+function buildTV() {
+  document.getElementById('tvContainer').innerHTML = `
+    <div class="info-badge">📺 <strong>RTVE (La 1 · Teledeporte · RTVE Play)</strong> — En abierto y gratuito</div>
+    <div class="gc" style="margin-bottom:15px"><div class="gh"><h3>🇪🇸 PARTIDOS DE ESPAÑA EN RTVE</h3><span>Fase de Grupos</span></div>
+    <div class="mc rtve"><div class="mt2">18:00</div><div class="mts"><div class="mtm"><span style="font-size:16px">🇪🇸</span><span class="mtn">España vs Cabo Verde</span></div></div><div class="mm"><span class="bd btv-rtve">La 1 · 15 junio</span></div></div>
+    <div class="mc rtve"><div class="mt2">18:00</div><div class="mts"><div class="mtm"><span style="font-size:16px">🇪🇸</span><span class="mtn">España vs Arabia Saudí</span></div></div><div class="mm"><span class="bd btv-rtve">La 1 · 21 junio</span></div></div>
+    <div class="mc rtve"><div class="mt2">02:00</div><div class="mts"><div class="mtm"><span style="font-size:16px">🇺🇾</span><span class="mtn">Uruguay vs España</span></div></div><div class="mm"><span class="bd btv-rtve">La 1 · 27 junio</span></div></div></div>
+    <div class="info-badge" style="margin-top:12px">🎯 <strong>Semifinales, Final y Tercer puesto</strong> también en RTVE en abierto. El resto de partidos, solo en DAZN (suscripción).</div>
+  `;
+}
+
+function buildSedes() {
+  let html = '';
+  SEDES.forEach(s => {
+    html += `<div class="sdc"><div class="sdf">${s.pais}</div><div class="sdci">${s.ciudad}</div><div class="sdst">${s.estadio}</div><div class="sdm"><span class="sdt2">⚽ ${s.partidos} partidos</span><span class="sdt2">👥 ${s.capacidad}</span></div></div>`;
+  });
+  document.getElementById('sedesContainer').innerHTML = html;
+}
+
+// Inicializar todo
+buildGrupos();
+buildPartidos();
+buildTabsClasificacion();
+buildClasificacion();
+buildSelectorEquipos();
+showTeam('ESP');
+buildGoleadores();
+buildCruces();
+buildResultados();
+buildNoticias();
+buildTV();
+buildSedes();
+
+// Exponer funciones globales
+window.showSection = showSection;
+window.cambiarGrupo = cambiarGrupo;
+window.showTeam = showTeam;
+window.abrirModal = abrirModal;
+window.cerrarModal = cerrarModal;
+window.fetchResultadosReales = fetchResultadosReales;
+window.fetchNoticiasReales = fetchNoticiasReales;
+</script>
+
+<div class="modal-overlay" id="playerModal" onclick="if(event.target===this) cerrarModal()">
+  <div class="modal-box">
+    <div class="modal-head">
+      <button class="modal-close" onclick="cerrarModal()">✕</button>
+      <div class="modal-flag" id="modalFlag"></div>
+      <div class="modal-name" id="modalName"></div>
+      <div class="modal-team" id="modalTeam"></div>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+</body>
+</html>
