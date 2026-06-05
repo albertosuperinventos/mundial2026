@@ -77,7 +77,7 @@
         function mostrarApp(){
             document.getElementById('loginScreen').style.display='none';
             document.getElementById('appScreen').style.display='block';
-            iniciarMundial();
+            window.iniciarMundial();
         }
     </script>
 
@@ -656,6 +656,7 @@ async function fetchNews(){
     c.innerHTML='<div class="ng">'+news.map(n=>{const q=(n.query||n.title).replace(/"/g,'&quot;');return '<div class="nc" data-q="'+q+'"><div class="ni">'+n.emoji+'</div><div><div class="ntg">'+n.tag+'</div><div class="nti">'+n.title+'</div><div class="ndt">'+n.time+'</div></div></div>';}).join('')+'</div>';
   c.querySelectorAll('.nc').forEach(el=>el.addEventListener('click',()=>askNews(el.dataset.q)));
   startNewsCountdown();
+  }catch(e){c.innerHTML='<div class="ar"><p>Error al cargar noticias. Inténtalo de nuevo.</p></div>';}
 }
 function startNewsCountdown(){clearInterval(newsTimer);newsSeconds=300;updateNewsCd();newsTimer=setInterval(()=>{newsSeconds--;updateNewsCd();if(newsSeconds<=0)fetchNews();},1000);}
 function updateNewsCd(){const el=document.getElementById('news-cd');if(!el)return;const m=Math.floor(newsSeconds/60);const s=newsSeconds%60;el.textContent='Próxima actualización en '+m+':'+String(s).padStart(2,'0');}
