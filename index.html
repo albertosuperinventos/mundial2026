@@ -654,21 +654,17 @@ async function fetchNews(){
   const c=document.getElementById('ncon');
   c.innerHTML='<div class="ald" style="padding:16px"><span>Buscando noticias</span><span class="dots"><span>.</span><span>.</span><span>.</span></span></div>';
   try{
-    const query=encodeURIComponent('FIFA World Cup 2026');
-    const rss=encodeURIComponent('https://news.google.com/rss/search?q='+query+'&hl=es&gl=ES&ceid=ES:es');
-    const url='https://api.rss2json.com/v1/api.json?rss_url='+rss+'&api_key=public&count=6';
-    const res=await fetch(url);
+    const res=await fetch(WORKER_URL+'/news');
     const data=await res.json();
     if(!data.items||!data.items.length){throw new Error('Sin resultados');}
     const emojis=['⚽','🏆','🌍','🎯','📰','🔥','⭐','🗓️'];
     const now=new Date();
     const cards=data.items.map((item,i)=>{
-      const pub=new Date(item.pubDate);
-      const diff=Math.round((now-pub)/3600000);
-      const time=diff<1?'Hace menos de 1h':diff<24?'Hace '+diff+'h':Math.floor(diff/24)+'d';
+      const pub=item.pubDate?new Date(item.pubDate):null;
+      const diff=pub?Math.round((now-pub)/3600000):null;
+      const time=diff===null?'':diff<1?'Hace menos de 1h':diff<24?'Hace '+diff+'h':Math.floor(diff/24)+'d';
       const emoji=emojis[i%emojis.length];
-      const source=item.author||item.source||'Google News';
-      const q=item.title.replace(/"/g,'&quot;');
+      const source=item.source||'Google News';
       const link=item.link||'#';
       return '<a href="'+link+'" target="_blank" rel="noopener" style="text-decoration:none"><div class="nc"><div class="ni">'+emoji+'</div><div style="flex:1"><div class="ntg">'+source+'</div><div class="nti">'+item.title+'</div><div class="ndt">'+time+'</div></div></div></a>';
     }).join('');
