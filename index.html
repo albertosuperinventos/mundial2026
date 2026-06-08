@@ -416,6 +416,10 @@ self.addEventListener('fetch',e=>e.respondWith(caches.match(e.request).then(r=>r
       <div class="stitle" style="margin-bottom:0">Noticias</div>
       <div class="auto-badge"><div class="auto-dot"></div> Auto &middot; cada 5 min</div>
     </div>
+    <div class="fb" style="margin-bottom:11px">
+      <button class="fbt active" id="nfilt-all" onclick="setNewsFilter('all',this)">&#x1F30D; Todas</button>
+      <button class="fbt" id="nfilt-spain" onclick="setNewsFilter('spain',this)">&#x1F1EA;&#x1F1F8; Prensa espa&ntilde;ola</button>
+    </div>
     <div id="ncon"><div class="ald" style="padding:20px"><span>Cargando noticias</span><span class="dots"><span>.</span><span>.</span><span>.</span></span></div></div>
     <div class="news-cd" id="news-cd"></div>
   </div>
@@ -648,13 +652,20 @@ async function fetchLive(){
   icon.classList.remove('spin');
 }
 
-let newsTimer=null,newsSeconds=300,newsLoaded=false;
+let newsTimer=null,newsSeconds=300,newsLoaded=false,newsFilter='all';
+function setNewsFilter(f,btn){
+  newsFilter=f;
+  document.querySelectorAll('#nfilt-all,#nfilt-spain').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  fetchNews();
+}
 async function fetchNews(){
   newsLoaded=true;
   const c=document.getElementById('ncon');
   c.innerHTML='<div class="ald" style="padding:16px"><span>Buscando noticias</span><span class="dots"><span>.</span><span>.</span><span>.</span></span></div>';
   try{
-    const res=await fetch(WORKER_URL+'/news');
+    const url=WORKER_URL+'/news'+(newsFilter==='spain'?'?filter=spain':'');
+    const res=await fetch(url);
     const data=await res.json();
     if(!data.items||!data.items.length){throw new Error('Sin resultados');}
     const emojis=['⚽','🏆','🌍','🎯','📰','🔥','⭐','🗓️'];
