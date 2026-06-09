@@ -776,6 +776,7 @@ function buildGoleadores(){
     con.innerHTML='<div style="background:var(--card);border:1px solid var(--bdr);border-radius:10px;overflow:hidden"><table class="stable"><thead><tr><th>#</th><th style="text-align:left">Jugador</th><th style="text-align:left">Selección</th><th style="text-align:left">Club</th><th>Goles</th></tr></thead><tbody>'+rows+'</tbody></table></div><p style="font-size:11px;color:var(--mut);margin-top:8px;text-align:center">Datos previos — se actualizará con los goles del torneo</p>';
   }
 }
+let _scorersData=null;
 async function fetchWorkerData(){
   try{
     const [sRes,scRes,mRes]=await Promise.all([
