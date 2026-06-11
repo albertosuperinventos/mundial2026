@@ -416,10 +416,7 @@ self.addEventListener('fetch',e=>e.respondWith(caches.match(e.request).then(r=>r
       <div class="stitle" style="margin-bottom:0">Noticias</div>
       <div class="auto-badge"><div class="auto-dot"></div> Auto &middot; cada 5 min</div>
     </div>
-    <div class="fb" style="margin-bottom:11px">
-      <button class="fbt active" id="nfilt-all" onclick="setNewsFilter('all',this)">&#x1F30D; Todas</button>
-      <button class="fbt" id="nfilt-spain" onclick="setNewsFilter('spain',this)">&#x1F1EA;&#x1F1F8; Prensa espa&ntilde;ola</button>
-    </div>
+
     <div id="ncon"><div class="ald" style="padding:20px"><span>Cargando noticias</span><span class="dots"><span>.</span><span>.</span><span>.</span></span></div></div>
     <div class="news-cd" id="news-cd"></div>
   </div>
@@ -640,9 +637,9 @@ async function fetchLive(){
   body.innerHTML='<div class="ald"><span>Buscando resultados en tiempo real</span><span class="dots"><span>.</span><span>.</span><span>.</span></span></div>';
   try{
     const today=new Date().toLocaleDateString('es-ES',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:900,tools:[{type:'web_search_20250305',name:'web_search'}],system:'Eres el asistente de resultados del Mundial FIFA 2026. Hoy es '+today+'. El torneo comienza el 11 de junio de 2026 con México vs Sudáfrica en el Estadio Azteca. Busca el estado actual. Si ya ha comenzado: marcadores en vivo, resultados de hoy, próximos partidos. Si no: días que faltan y primer partido. Responde en español, conciso, con emojis de banderas.',messages:[{role:'user',content:'Estado actual del Mundial FIFA 2026: partidos en vivo, resultados de hoy, próximos partidos.'}]})});
+    const res=await fetch(WORKER_URL+'/live',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({today})});
     const data=await res.json();
-    const text=data.content?.filter(b=>b.type==='text').map(b=>b.text).join('')||'Sin respuesta.';
+    const text=data.text||'Sin respuesta.';
     const fmt=text.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n\n/g,'</p><p style="margin-top:8px">').replace(/\n/g,'<br>');
     const now2=new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
     const live=text.toLowerCase().includes('en juego')||text.toLowerCase().includes("'")||text.toLowerCase().includes('min)');
@@ -652,7 +649,7 @@ async function fetchLive(){
   icon.classList.remove('spin');
 }
 
-let newsTimer=null,newsSeconds=300,newsLoaded=false,newsFilter='all';
+let newsTimer=null,newsSeconds=300,newsLoaded=false,newsFilter='spain';
 function setNewsFilter(f,btn){
   newsFilter=f;
   document.querySelectorAll('#nfilt-all,#nfilt-spain').forEach(b=>b.classList.remove('active'));
@@ -694,9 +691,9 @@ function updateNewsCd(){const el=document.getElementById('news-cd');if(!el)retur
 async function askCustom(q){
   const icon=document.getElementById('rico');icon.classList.add('spin');
   try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:800,tools:[{type:'web_search_20250305',name:'web_search'}],system:'Asistente del Mundial FIFA 2026. Responde en español, claro y conciso, con emojis de banderas.',messages:[{role:'user',content:q}]})});
+    const res=await fetch(WORKER_URL+'/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q})});
     const data=await res.json();
-    const text=data.content?.filter(b=>b.type==='text').map(b=>b.text).join('')||'Sin respuesta.';
+    const text=data.text||'Sin respuesta.';
     document.getElementById('aibody').innerHTML='<div class="ar"><p>'+text.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>')+'</p></div>';
   }catch(e){document.getElementById('aibody').innerHTML='<div class="ar"><p>Error de conexión.</p></div>';}
   icon.classList.remove('spin');
@@ -771,6 +768,8 @@ function buildGoleadores(){
     }).join('');
     const now=new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
     con.innerHTML='<div style="background:var(--card);border:1px solid var(--bdr);border-radius:10px;overflow:hidden"><table class="stable"><thead><tr><th>#</th><th style="text-align:left">Jugador</th><th style="text-align:left">Selección</th><th>Goles</th><th>Asist.</th></tr></thead><tbody>'+rows+'</tbody></table></div><p style="font-size:11px;color:var(--mut);margin-top:8px;text-align:center">🕐 Actualizado: '+now+' · Football-Data.org</p>';
+  } else if(_scorersData&&_scorersData.scorers){
+    con.innerHTML='<div style="background:var(--card);border:1px solid var(--bdr);border-radius:10px;padding:32px 20px;text-align:center"><div style="font-size:36px;margin-bottom:10px">⚽</div><div style="font-size:15px;font-weight:700;color:var(--navy);margin-bottom:6px">¡El torneo acaba de comenzar!</div><div style="font-size:12px;color:var(--mut)">Los goleadores aparecerán aquí en cuanto se marquen los primeros goles.</div><div style="font-size:10px;color:var(--mut);margin-top:10px">🕐 Datos en tiempo real · Football-Data.org</div></div>';
   } else {
     const rows=GOLEADORES.map((g,i)=>'<tr><td><strong>'+(i+1)+'</strong></td><td><strong>'+g.n+'</strong><br><small style="color:var(--mut)">'+g.pos+'</small></td><td>'+g.s+'</td><td style="font-size:11px;color:var(--mut)">'+g.c+'</td><td style="text-align:center"><strong style="font-size:16px;color:var(--navy)">'+g.g+'</strong></td></tr>').join('');
     con.innerHTML='<div style="background:var(--card);border:1px solid var(--bdr);border-radius:10px;overflow:hidden"><table class="stable"><thead><tr><th>#</th><th style="text-align:left">Jugador</th><th style="text-align:left">Selección</th><th style="text-align:left">Club</th><th>Goles</th></tr></thead><tbody>'+rows+'</tbody></table></div><p style="font-size:11px;color:var(--mut);margin-top:8px;text-align:center">Datos previos — se actualizará con los goles del torneo</p>';
