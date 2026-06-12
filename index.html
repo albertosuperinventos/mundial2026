@@ -36,7 +36,8 @@
           }catch(e){ console.warn('FCM init error:',e); }
         }
 
-        async function toggleNotif(matchKey, matchInfo, btn){
+        async function toggleNotif(matchKey, btn){
+          const matchInfo = window._mdata?.[matchKey] || {};
           if(!fcmToken){
             await initFCM();
             if(!fcmToken){
@@ -553,7 +554,10 @@ function buildMatches(){
       const mk=m.hk+'-'+m.ak+'-'+m.d.replace(/\s/g,'');
       const saved=JSON.parse(localStorage.getItem('notifMatches')||'{}');
       const hasNotif=saved[mk];
-      const notifBtn='<button onclick="toggleNotif(\''+mk+'\','+JSON.stringify({hn:m.hn,an:m.an,hf:m.hf,af:m.af,d:m.d,t:m.t})+',this)" style="margin-top:6px;width:100%;padding:5px 8px;border-radius:6px;border:1px solid var(--bdr);font-size:11px;cursor:pointer;background:'+(hasNotif?'var(--gold)':'var(--bdr)')+';color:'+(hasNotif?'#000':'var(--txt)')+'">'+( hasNotif?'🔕 Aviso activado':'🔔 Activar aviso')+'</button>';
+      const mk=m.hk+'-'+m.ak+'-'+m.d.replace(/\s/g,'');window._mdata=window._mdata||{};window._mdata[mk]={hn:m.hn,an:m.an,hf:m.hf,af:m.af,d:m.d,t:m.t};
+      const saved=JSON.parse(localStorage.getItem('notifMatches')||'{}');
+      const hasNotif=saved[mk];
+      const notifBtn='<button onclick="toggleNotif(\''+mk+'\',this)" style="margin-top:6px;width:100%;padding:5px 8px;border-radius:6px;border:1px solid var(--bdr);font-size:11px;cursor:pointer;background:'+(hasNotif?'var(--gold)':'var(--bdr)')+';color:'+(hasNotif?'#000':'var(--txt)')+'">'+(hasNotif?'\uD83D\uDD15 Aviso activado':'\uD83D\uDD14 Activar aviso')+'</button>';
       return '<div class="'+cls+'"><div class="mt2">'+m.t+'</div><div class="mts"><div class="mtm"><span style="font-size:13px">'+m.hf+'</span><span class="mtn">'+m.hn+'</span></div><div class="msep"></div><div class="mtm"><span style="font-size:13px">'+m.af+'</span><span class="mtn">'+m.an+'</span></div></div>'+score+'<div class="mm"><span class="bd bg2">Grupo '+m.g+'</span><span class="mv">'+m.v+'</span>'+tvBadge+'</div>'+notifBtn+'</div>';
     }).join('')+'</div>').join('');
 }
