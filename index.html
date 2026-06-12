@@ -526,7 +526,8 @@ function buildStandings(){
   const rows=teams.map(([k,n,f],i)=>{
     let pj=0,g=0,e=0,p=0,gf=0,gc=0,dg=0,pts=0;
     if(liveTeams){
-      const t=liveTeams.find(r=>r.team&&(r.team.tla===k||r.team.shortName===n||r.team.name===n));
+      const t=liveTeams.find(r=>r.team&&(r.team.tla===k||normalize(r.team.shortName||'')===normalize(n)||normalize(r.team.name||'')===normalize(n)));
+      function normalize(s){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');}
       if(t){pj=t.playedGames||0;g=t.won||0;e=t.draw||0;p=t.lost||0;gf=t.goalsFor||0;gc=t.goalsAgainst||0;dg=gf-gc;pts=t.points||0;}
     }
     const pc=i<2?'ppq':i===2?'ppr':'ppe';
@@ -621,14 +622,16 @@ function buildCountdown(){
 }
 
 // ===== LIVE RESULTS — autorefresh cada 3 min =====
-let liveTimer=null, liveSeconds=180;
+let liveTimer=null, liveSeconds=180, liveFetching=false;
 function startLiveCountdown(){
   clearInterval(liveTimer);liveSeconds=180;updateLiveCd();
-  liveTimer=setInterval(()=>{liveSeconds--;updateLiveCd();if(liveSeconds<=0){fetchLive();}},1000);
+  liveTimer=setInterval(()=>{if(liveFetching)return;liveSeconds--;updateLiveCd();if(liveSeconds<=0){liveSeconds=180;fetchLive();}},1000);
 }
 function updateLiveCd(){const el=document.getElementById('live-cd');if(!el)return;const m=Math.floor(liveSeconds/60),s=liveSeconds%60;el.textContent='&#x1F504; Pr\u00f3xima actualizaci\u00f3n autom\u00e1tica en '+m+':'+String(s).padStart(2,'0');}
 
 async function fetchLive(){
+  if(liveFetching)return;
+  liveFetching=true;
   buildCountdown();
   const body=document.getElementById('aibody');
   const icon=document.getElementById('rico');
@@ -638,15 +641,27 @@ async function fetchLive(){
   try{
     const today=new Date().toLocaleDateString('es-ES',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
     const res=await fetch(WORKER_URL+'/live',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({today})});
+    if(!res.ok)throw new Error('HTTP '+res.status);
     const data=await res.json();
     const text=data.text||'Sin respuesta.';
-    const fmt=text.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n\n/g,'</p><p style="margin-top:8px">').replace(/\n/g,'<br>');
+    const fmt=text
+      .replace(/###\s*(.+)/g,'<strong style="color:var(--navy);font-size:13px;display:block;margin-top:8px">$1</strong>')
+      .replace(/##\s*(.+)/g,'<strong style="color:var(--navy);font-size:14px;display:block;margin-top:10px">$1</strong>')
+      .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
+      .replace(/\*(.*?)\*/g,'<em>$1</em>')
+      .replace(/\n\n/g,'</p><p style="margin-top:8px">')
+      .replace(/\n/g,'<br>');
     const now2=new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
-    const live=text.toLowerCase().includes('en juego')||text.toLowerCase().includes("'")||text.toLowerCase().includes('min)');
+    const live=text.toLowerCase().includes('en juego')||text.toLowerCase().includes('en vivo')||text.toLowerCase().includes("'")||text.toLowerCase().includes('min)');
     dot.style.display=live?'block':'none';
-    body.innerHTML='<div class="ar"><p>'+fmt+'</p></div><div class="ut">&#x1F550; Actualizado: '+now2+' &middot; búsqueda web en tiempo real</div>';
-  }catch(e){dot.style.display='none';body.innerHTML='<div class="ar"><p>Error de conexión. Inténtalo de nuevo.</p></div>';}
+    body.innerHTML='<div class="ar"><p>'+fmt+'</p></div><div class="ut">&#x1F550; Actualizado: '+now2+' &middot; b\u00fasqueda web en tiempo real</div>';
+  }catch(e){
+    dot.style.display='none';
+    body.innerHTML='<div class="ar"><p>Error de conexi\u00f3n. Inténtalo de nuevo.</p></div>';
+  }
   icon.classList.remove('spin');
+  liveFetching=false;
+  liveSeconds=180;
 }
 
 let newsTimer=null,newsSeconds=300,newsLoaded=false,newsFilter='spain';
