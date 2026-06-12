@@ -551,9 +551,6 @@ function buildMatches(){
           score='<div style="font-size:15px;font-weight:700;color:var(--navy);margin:4px 0">'+lm.score.fullTime.home+' - '+lm.score.fullTime.away+st+'</div>';
         }
       }
-      const mk=m.hk+'-'+m.ak+'-'+m.d.replace(/\s/g,'');
-      const saved=JSON.parse(localStorage.getItem('notifMatches')||'{}');
-      const hasNotif=saved[mk];
       const mk=m.hk+'-'+m.ak+'-'+m.d.replace(/\s/g,'');window._mdata=window._mdata||{};window._mdata[mk]={hn:m.hn,an:m.an,hf:m.hf,af:m.af,d:m.d,t:m.t};
       const saved=JSON.parse(localStorage.getItem('notifMatches')||'{}');
       const hasNotif=saved[mk];
