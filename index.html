@@ -19,9 +19,50 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+        import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-messaging.js";
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+        const messaging = getMessaging(app);
+        const VAPID_KEY = 'BH6Ep5F2H57mpwFHhQa9xi6_QkOYJYvLDBbrYa_E448kRtJjMpSmajfGFVEZq41y3inueLK7vHus02X7MwS1Ibg';
+        let fcmToken = null;
+
+        async function initFCM(){
+          try{
+            if(!('Notification' in window))return;
+            const sw = await navigator.serviceWorker.register('/mundial2026/firebase-messaging-sw.js');
+            const token = await getToken(messaging, {vapidKey: VAPID_KEY, serviceWorkerRegistration: sw});
+            if(token){ fcmToken=token; localStorage.setItem('fcmToken',token); }
+          }catch(e){ console.warn('FCM init error:',e); }
+        }
+
+        async function toggleNotif(matchKey, matchInfo, btn){
+          if(!fcmToken){
+            await initFCM();
+            if(!fcmToken){
+              const perm = await Notification.requestPermission();
+              if(perm!=='granted'){ alert('Debes permitir las notificaciones en tu navegador.'); return; }
+              await initFCM();
+            }
+          }
+          const saved = JSON.parse(localStorage.getItem('notifMatches')||'{}');
+          if(saved[matchKey]){
+            delete saved[matchKey];
+            localStorage.setItem('notifMatches', JSON.stringify(saved));
+            await fetch(WORKER_URL+'/notif-remove', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({token:fcmToken, matchKey})});
+            btn.textContent='🔔 Activar aviso';
+            btn.style.background='var(--bdr)';
+            btn.style.color='var(--txt)';
+          } else {
+            saved[matchKey]=matchInfo;
+            localStorage.setItem('notifMatches', JSON.stringify(saved));
+            await fetch(WORKER_URL+'/notif-add', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({token:fcmToken, matchKey, matchInfo})});
+            btn.textContent='🔕 Aviso activado';
+            btn.style.background='var(--gold)';
+            btn.style.color='#000';
+          }
+        }
+        window.toggleNotif = toggleNotif;
 
         function obtenerHuellaDispositivo() {
             const c=[navigator.userAgent,screen.width+'x'+screen.height,screen.colorDepth,navigator.language,new Date().getTimezoneOffset(),navigator.hardwareConcurrency||0];
@@ -509,25 +550,34 @@ function buildMatches(){
           score='<div style="font-size:15px;font-weight:700;color:var(--navy);margin:4px 0">'+lm.score.fullTime.home+' - '+lm.score.fullTime.away+st+'</div>';
         }
       }
-      return '<div class="'+cls+'"><div class="mt2">'+m.t+'</div><div class="mts"><div class="mtm"><span style="font-size:13px">'+m.hf+'</span><span class="mtn">'+m.hn+'</span></div><div class="msep"></div><div class="mtm"><span style="font-size:13px">'+m.af+'</span><span class="mtn">'+m.an+'</span></div></div>'+score+'<div class="mm"><span class="bd bg2">Grupo '+m.g+'</span><span class="mv">'+m.v+'</span>'+tvBadge+'</div></div>';
+      const mk=m.hk+'-'+m.ak+'-'+m.d.replace(/\s/g,'');
+      const saved=JSON.parse(localStorage.getItem('notifMatches')||'{}');
+      const hasNotif=saved[mk];
+      const notifBtn='<button onclick="toggleNotif(\''+mk+'\','+JSON.stringify({hn:m.hn,an:m.an,hf:m.hf,af:m.af,d:m.d,t:m.t})+',this)" style="margin-top:6px;width:100%;padding:5px 8px;border-radius:6px;border:1px solid var(--bdr);font-size:11px;cursor:pointer;background:'+(hasNotif?'var(--gold)':'var(--bdr)')+';color:'+(hasNotif?'#000':'var(--txt)')+'">'+( hasNotif?'🔕 Aviso activado':'🔔 Activar aviso')+'</button>';
+      return '<div class="'+cls+'"><div class="mt2">'+m.t+'</div><div class="mts"><div class="mtm"><span style="font-size:13px">'+m.hf+'</span><span class="mtn">'+m.hn+'</span></div><div class="msep"></div><div class="mtm"><span style="font-size:13px">'+m.af+'</span><span class="mtn">'+m.an+'</span></div></div>'+score+'<div class="mm"><span class="bd bg2">Grupo '+m.g+'</span><span class="mv">'+m.v+'</span>'+tvBadge+'</div>'+notifBtn+'</div>';
     }).join('')+'</div>').join('');
 }
 
 let curG='H';
 function buildStdTabs(){document.getElementById('stabs').innerHTML=Object.keys(GROUPS).map(g=>'<button class="st'+(g===curG?' active':'')+'\" onclick=\"switchG(\''+g+'\',this)\">Grupo '+g+'</button>').join('');}
 function switchG(g,btn){curG=g;document.querySelectorAll('.st').forEach(b=>b.classList.remove('active'));btn.classList.add('active');buildStandings();}
+const TLA_MAP={'URU':'URY'};
 function buildStandings(){
   const teams=GROUPS[curG];
+  const tlas=teams.map(([k])=>TLA_MAP[k]||k);
   let liveTeams=null;
   if(_standingsData&&_standingsData.standings){
-    const sg=_standingsData.standings.find(s=>s.group&&s.group.replace('GROUP_','')===curG);
-    if(sg&&sg.table&&sg.table.length)liveTeams=sg.table;
+    const total=_standingsData.standings.find(s=>s.type==='TOTAL');
+    if(total&&total.table){
+      const filtered=total.table.filter(r=>r.team&&tlas.includes(r.team.tla));
+      if(filtered.length)liveTeams=filtered;
+    }
   }
   const rows=teams.map(([k,n,f],i)=>{
     let pj=0,g=0,e=0,p=0,gf=0,gc=0,dg=0,pts=0;
     if(liveTeams){
-      const t=liveTeams.find(r=>r.team&&(r.team.tla===k||normalize(r.team.shortName||'')===normalize(n)||normalize(r.team.name||'')===normalize(n)));
-      function normalize(s){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');}
+      const tlak=TLA_MAP[k]||k;
+      const t=liveTeams.find(r=>r.team&&r.team.tla===tlak);
       if(t){pj=t.playedGames||0;g=t.won||0;e=t.draw||0;p=t.lost||0;gf=t.goalsFor||0;gc=t.goalsAgainst||0;dg=gf-gc;pts=t.points||0;}
     }
     const pc=i<2?'ppq':i===2?'ppr':'ppe';
@@ -657,7 +707,7 @@ async function fetchLive(){
     body.innerHTML='<div class="ar"><p>'+fmt+'</p></div><div class="ut">&#x1F550; Actualizado: '+now2+' &middot; b\u00fasqueda web en tiempo real</div>';
   }catch(e){
     dot.style.display='none';
-    body.innerHTML='<div class="ar"><p>Error de conexi\u00f3n. Inténtalo de nuevo.</p></div>';
+    body.innerHTML='<div class="ar"><p>Error de conexi\u00f3n. Int\u00e9ntalo de nuevo.</p></div>';
   }
   icon.classList.remove('spin');
   liveFetching=false;
