@@ -30,7 +30,7 @@
         async function initFCM(){
           try{
             if(!('Notification' in window))return;
-            const sw = await navigator.serviceWorker.register('/mundial2026/firebase-messaging-sw.js');
+            const sw = await navigator.serviceWorker.register('/mundial2026/firebase-messaging-sw.js', {scope: '/mundial2026/'});
             const token = await getToken(messaging, {vapidKey: VAPID_KEY, serviceWorkerRegistration: sw});
             if(token){ fcmToken=token; localStorage.setItem('fcmToken',token); }
           }catch(e){ console.warn('FCM init error:',e); }
@@ -119,7 +119,7 @@
         function mostrarApp(){
             document.getElementById('loginScreen').style.display='none';
             document.getElementById('appScreen').style.display='block';
-            window.iniciarMundial();
+            window.iniciarMundial ? window.iniciarMundial() : document.addEventListener('DOMContentLoaded', ()=>window.iniciarMundial&&window.iniciarMundial());
         }
     </script>
 
