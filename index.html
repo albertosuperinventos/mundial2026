@@ -53,14 +53,14 @@
           if(saved[matchKey]){
             delete saved[matchKey];
             localStorage.setItem('notifMatches', JSON.stringify(saved));
-            const r=await fetch(WORKER_URL+'/notif-remove', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({token:fcmToken, matchKey})});
+            const r=await fetch(window.WORKER_URL+'/notif-remove', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({token:fcmToken, matchKey})});
             btn.textContent='🔔 Activar aviso';
             btn.style.background='var(--bdr)';
             btn.style.color='var(--txt)';
           } else {
             saved[matchKey]=matchInfo;
             localStorage.setItem('notifMatches', JSON.stringify(saved));
-            const r=await fetch(WORKER_URL+'/notif-add', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({token:fcmToken, matchKey, matchInfo})});
+            const r=await fetch(window.WORKER_URL+'/notif-add', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({token:fcmToken, matchKey, matchInfo})});
             const rd=await r.json();
             if(!rd.ok){alert('DEBUG: Worker rechazó el aviso. token='+(fcmToken?'sí':'no')+' matchKey='+matchKey);return;}
             btn.textContent='🔕 Aviso activado';
@@ -124,9 +124,17 @@
         function mostrarApp(){
             document.getElementById('loginScreen').style.display='none';
             document.getElementById('appScreen').style.display='block';
-            window.iniciarMundial ? window.iniciarMundial() : document.addEventListener('DOMContentLoaded', ()=>window.iniciarMundial&&window.iniciarMundial());
+            if(window.iniciarMundial){ window.iniciarMundial(); return; }
+            let intentos=0;
+            const poll=setInterval(()=>{
+                intentos++;
+                if(window.iniciarMundial){ clearInterval(poll); window.iniciarMundial(); }
+                else if(intentos>50){ clearInterval(poll); console.error('iniciarMundial no se cargó tras 5s'); }
+            },100);
         }
     </script>
+
+    <script>window.WORKER_URL='https://mundial-worker.albertosuperinventos.workers.dev';</script>
 
     <style>
         *{margin:0;padding:0;box-sizing:border-box}
@@ -756,6 +764,7 @@ function buildLiveScores(){
   el.innerHTML='<div class="lsc-grid">'+cards+'</div>';
 }
 
+async function fetchLive(){
   if(liveFetching)return;
   // Usar caché local si tiene menos de 3 minutos
   const now=Date.now();
