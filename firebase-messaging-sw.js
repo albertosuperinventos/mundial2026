@@ -13,13 +13,13 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage(function(payload) {
-  const { title, body, icon } = payload.notification || {};
-  self.registration.showNotification(title || '⚽ Mundial 2026', {
-    body: body || 'Partido próximo',
-    icon: icon || '/mundial2026/icon-192.png',
+  const d = payload.data || {};
+  self.registration.showNotification(d.title || '⚽ Mundial 2026', {
+    body: d.body || 'Partido próximo',
+    icon: d.icon || '/mundial2026/icon-192.png',
     badge: '/mundial2026/icon-192.png',
     vibrate: [200, 100, 200],
-    tag: payload.data?.matchKey || 'mundial-notif',
+    tag: d.matchKey || 'mundial-notif',
     data: { url: 'https://albertosuperinventos.github.io/mundial2026/' }
   });
 });
