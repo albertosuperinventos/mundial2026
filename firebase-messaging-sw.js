@@ -15,6 +15,18 @@ const messaging = firebase.messaging();
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
 
+// DEBUG: capturar el evento push crudo, antes de que Firebase lo procese
+self.addEventListener('push', function(event) {
+  let raw = '(sin datos)';
+  try { raw = event.data ? event.data.text() : '(vacío)'; } catch(e) { raw = 'error leyendo: ' + e.message; }
+  event.waitUntil(
+    self.registration.showNotification('🐛 DEBUG push recibido', {
+      body: raw.substring(0, 150),
+      tag: 'debug-push'
+    })
+  );
+});
+
 messaging.onBackgroundMessage(function(payload) {
   const d = payload.data || {};
   self.registration.showNotification(d.title || '⚽ Mundial 2026', {
