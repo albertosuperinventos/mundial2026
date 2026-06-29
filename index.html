@@ -581,8 +581,8 @@ function filterM(f,btn){mf=f;document.querySelectorAll('.fbt').forEach(b=>b.clas
 let mdf='all';
 function _todayStr(){var d=new Date();var dw=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];var mo=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];return dw[d.getDay()]+' '+d.getDate()+' '+mo[d.getMonth()];}
 function filterMD(d){mdf=d;buildDateChips();buildMatches();}
-function buildDateChips(){var cont=document.getElementById('mdates');if(!cont)return;var seen={},days=[];MATCHES.forEach(function(m){if(!seen[m.d]){seen[m.d]=1;days.push(m.d);}});var today=_todayStr();var h='<button class="dchip'+(mdf==='all'?' active':'')+'" onclick="filterMD(\'all\')">Todos</button>';if(days.indexOf(today)>=0)h+='<button class="dchip'+(mdf===today?' active':'')+'" onclick="filterMD(\''+today+'\')">Hoy</button>';days.forEach(function(d){var lbl=d.split(' ').slice(0,2).join(' ');h+='<button class="dchip'+(mdf===d?' active':'')+'" onclick="filterMD(\''+d+'\')">'+lbl+'</button>';});cont.innerHTML=h;}
-function openMatchData(d,lm){if(!d&&!lm)return;var hf=d?d.hf:'',af=d?d.af:'',hn=d?d.hn:(lm&&lm.homeTeam?lm.homeTeam.shortName:''),an=d?d.an:(lm&&lm.awayTeam?lm.awayTeam.shortName:'');var score='',status='';if(lm){if(lm.score&&lm.score.fullTime&&lm.score.fullTime.home!==null&&lm.score.fullTime.home!==undefined){score=lm.score.fullTime.home+' - '+lm.score.fullTime.away;}status=(lm.status==='IN_PLAY'||lm.status==='PAUSED')?'\uD83D\uDD34 En vivo':lm.status==='FINISHED'?'Finalizado':(lm.status==='TIMED'||lm.status==='SCHEDULED')?'Programado':'';}document.getElementById('mmTitle').innerHTML=(hf?hf+' ':'')+hn+' <span style="color:var(--mut);font-weight:500">vs</span> '+(af?af+' ':'')+an;document.getElementById('mmSub').innerHTML=score?('<span style="font-size:24px;font-weight:800;color:var(--navy)">'+score+'</span>'):'';function row(ic,lb,va){return '<div class="modal-row"><div class="modal-icon">'+ic+'</div><div class="modal-label">'+lb+'</div><div class="modal-value">'+va+'</div></div>';}var rows='';if(status)rows+=row('\u26BD','Estado',status);if(d){rows+=row('\uD83D\uDCC5','Fecha',d.d);rows+=row('\uD83D\uDD52','Hora',d.t);rows+=row('\uD83C\uDFDF\uFE0F','Sede',d.v||'-');rows+=row('\uD83C\uDFC6','Grupo','Grupo '+(d.g||'-'));rows+=row('\uD83D\uDCFA','TV',d.tv||'-');}window._curMatch=d||null;var _fin=(lm&&lm.status==='FINISHED')||_matchPast(d);var _extra=(_fin&&d)?'<button id="mmResBtn" onclick="cargarResumen()">\uD83D\uDCCB Ver resumen del partido</button><div id="mmResumen"></div>':'';document.getElementById('mmBody').innerHTML=(rows||'<div style="padding:8px;color:var(--mut)">Sin datos adicionales</div>')+_extra;document.getElementById('matchModal').classList.add('open');document.body.style.overflow='hidden';}
+function buildDateChips(){var cont=document.getElementById('mdates');if(!cont)return;var seen={},days=[];_allM().forEach(function(m){if(!seen[m.d]){seen[m.d]=1;days.push(m.d);}});var today=_todayStr();var h='<button class="dchip'+(mdf==='all'?' active':'')+'" onclick="filterMD(\'all\')">Todos</button>';if(days.indexOf(today)>=0)h+='<button class="dchip'+(mdf===today?' active':'')+'" onclick="filterMD(\''+today+'\')">Hoy</button>';days.forEach(function(d){var lbl=d.split(' ').slice(0,2).join(' ');h+='<button class="dchip'+(mdf===d?' active':'')+'" onclick="filterMD(\''+d+'\')">'+lbl+'</button>';});cont.innerHTML=h;}
+function openMatchData(d,lm){if(!d&&!lm)return;var hf=d?d.hf:'',af=d?d.af:'',hn=d?d.hn:(lm&&lm.homeTeam?lm.homeTeam.shortName:''),an=d?d.an:(lm&&lm.awayTeam?lm.awayTeam.shortName:'');var score='',status='';if(lm){if(lm.score&&lm.score.fullTime&&lm.score.fullTime.home!==null&&lm.score.fullTime.home!==undefined){score=lm.score.fullTime.home+' - '+lm.score.fullTime.away;}status=(lm.status==='IN_PLAY'||lm.status==='PAUSED')?'\uD83D\uDD34 En vivo':lm.status==='FINISHED'?'Finalizado':(lm.status==='TIMED'||lm.status==='SCHEDULED')?'Programado':'';}document.getElementById('mmTitle').innerHTML=(hf?hf+' ':'')+hn+' <span style="color:var(--mut);font-weight:500">vs</span> '+(af?af+' ':'')+an;document.getElementById('mmSub').innerHTML=score?('<span style="font-size:24px;font-weight:800;color:var(--navy)">'+score+'</span>'):'';function row(ic,lb,va){return '<div class="modal-row"><div class="modal-icon">'+ic+'</div><div class="modal-label">'+lb+'</div><div class="modal-value">'+va+'</div></div>';}var rows='';if(status)rows+=row('\u26BD','Estado',status);if(d){rows+=row('\uD83D\uDCC5','Fecha',d.d);rows+=row('\uD83D\uDD52','Hora',d.t);rows+=row('\uD83C\uDFDF\uFE0F','Sede',d.v||'-');rows+=row('\uD83C\uDFC6',(d.g&&d.g.length===1)?'Grupo':'Ronda',(d.g&&d.g.length===1)?('Grupo '+d.g):(d.g||'-'));rows+=row('\uD83D\uDCFA','TV',d.tv||'-');}window._curMatch=d||null;var _fin=(lm&&lm.status==='FINISHED')||_matchPast(d);var _extra=(_fin&&d)?'<button id="mmResBtn" onclick="cargarResumen()">\uD83D\uDCCB Ver resumen del partido</button><div id="mmResumen"></div>':'';document.getElementById('mmBody').innerHTML=(rows||'<div style="padding:8px;color:var(--mut)">Sin datos adicionales</div>')+_extra;document.getElementById('matchModal').classList.add('open');document.body.style.overflow='hidden';}
 function openMatch(mk){var d=MATCHES.find(function(m){return (m.hk+'-'+m.ak+'-'+m.d.replace(/\s/g,''))===mk;});if(!d)d=(window._mdata||{})[mk];var lm=null;if(d&&window._matchesData&&_matchesData.matches){lm=_matchesData.matches.find(function(x){return x.homeTeam&&x.awayTeam&&(x.homeTeam.tla===d.hk||x.homeTeam.shortName===d.hn)&&(x.awayTeam.tla===d.ak||x.awayTeam.shortName===d.an);});}openMatchData(d,lm);}
 function openLive(i){var lm=(window._liveCards||[])[i];if(!lm)return;var d=MATCHES.find(function(mm){return (lm.homeTeam.tla===mm.hk||lm.homeTeam.shortName===mm.hn)&&(lm.awayTeam.tla===mm.ak||lm.awayTeam.shortName===mm.an);});if(!d)d=MATCHES.find(function(mm){return (lm.homeTeam.tla===mm.ak||lm.homeTeam.shortName===mm.an)&&(lm.awayTeam.tla===mm.hk||lm.awayTeam.shortName===mm.hn);});openMatchData(d,lm);}
 function cerrarMatch(){document.getElementById('matchModal').classList.remove('open');document.body.style.overflow='';}
@@ -592,7 +592,7 @@ function cargarResumen(){var d=window._curMatch;if(!d)return;var btn=document.ge
 
 let _matchesData=null;
 function buildMatches(){
-  let filtered=mf==='all'?MATCHES:mf==='RTVE'?MATCHES.filter(isRTVE):MATCHES.filter(m=>m.hk===mf||m.ak===mf||(mf==='ESP'&&m.hl));
+  let _src=_allM();let filtered=mf==='all'?_src:mf==='RTVE'?_src.filter(isRTVE):_src.filter(m=>m.hk===mf||m.ak===mf||(mf==='ESP'&&m.hl));
   if(mdf!=='all')filtered=filtered.filter(m=>m.d===mdf);
   const byDay={};
   filtered.forEach(m=>{if(!byDay[m.d])byDay[m.d]=[];byDay[m.d].push(m);});
@@ -700,35 +700,17 @@ function abrirModal(code,num){
 function cerrarModal(){document.getElementById('playerModal').classList.remove('open');document.body.style.overflow='';}
 
 // ===== BRACKET =====
-function buildBracket(){
-  const rounds=[
-    {t:'Dieciseisavos',d:'28 jun\u20133 jul',matches:[
-      {h:'2A',a:'2B',d:'28 jun \u00b7 Los \u00c1ngeles'},{h:'1E',a:'3ABCDF',d:'29 jun \u00b7 Boston'},
-      {h:'1F',a:'2C',d:'30 jun \u00b7 Monterrey'},{h:'1I',a:'3CDFGH',d:'30 jun \u00b7 Nueva Jersey'},
-      {h:'2E',a:'2I',d:'30 jun \u00b7 Dallas'},{h:'1H',a:'2J',d:'2 jul \u00b7 Los \u00c1ngeles'},
-      {h:'1D',a:'3BEFIJ',d:'2 jul \u00b7 San Francisco'},{h:'1G',a:'3AEHIJ',d:'1 jul \u00b7 Seattle'},
-      {h:'1C',a:'2F',d:'29 jun \u00b7 Houston'},{h:'1A',a:'3CEFHI',d:'1 jul \u00b7 Cd. M\u00e9xico'},
-      {h:'1L',a:'3EHIJK',d:'1 jul \u00b7 Atlanta'},{h:'2K',a:'2L',d:'2 jul \u00b7 Toronto'},
-      {h:'1J',a:'2H',d:'3 jul \u00b7 Miami'},{h:'2D',a:'2G',d:'30 jun \u00b7 Dallas'},
-      {h:'1B',a:'3EFGIJ',d:'3 jul \u00b7 \u2014'},{h:'1K',a:'3DEIJL',d:'3 jul \u00b7 \u2014'}
-    ]},
-    {t:'Octavos',d:'4\u20137 jul',matches:Array(8).fill({h:'TBD',a:'TBD'})},
-    {t:'Cuartos',d:'9\u201311 jul',matches:Array(4).fill({h:'TBD',a:'TBD'})},
-    {t:'Semis',d:'14\u201315 jul',matches:Array(2).fill({h:'TBD',a:'TBD'})},
-    {t:'FINAL',d:'19 jul \u00b7 MetLife',matches:[{h:'TBD',a:'TBD'}]}
-  ];
-  const isTbd=s=>s==='TBD';
-  const cls=s=>isTbd(s)?'tbd':'bracket-ref';
-  document.getElementById('bracket').innerHTML=rounds.map((r,ri)=>
-    '<div class="rc"><div class="rt">'+r.t+'<br><span style="font-size:8px">'+r.d+'</span></div>'+
-    r.matches.map((m,i)=>{
-      const fin=(ri===4&&i===0);
-      return '<div class="bm'+(fin?' fin':'')+'">'+(m.d?'<div style="font-size:8px;color:var(--mut);padding:3px 8px 0">'+m.d+'</div>':'')+
-      '<div class="bt2">&#x1F3F3;<span class="'+cls(m.h)+'">'+m.h+'</span></div>'+
-      '<div class="bt2">&#x1F3F3;<span class="'+cls(m.a)+'">'+m.a+'</span></div></div>';
-    }).join('')+'</div>'
-  ).join('');
-}
+var _TEAM={};(function(){for(var _g in GROUPS){GROUPS[_g].forEach(function(a){_TEAM[a[0]]={n:a[1],f:a[2]};});}})();
+function _tla2key(tla){if(!tla)return '';if(tla==='URY')return 'URU';return tla;}
+var _STAGE={LAST_32:'Dieciseisavos',LAST_16:'Octavos',QUARTER_FINALS:'Cuartos',SEMI_FINALS:'Semifinales',THIRD_PLACE:'3er puesto',FINAL:'Final'};
+function _koDateStr(utc){var dw=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];var mo=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];var ymd=new Date(utc).toLocaleDateString('en-CA',{timeZone:'Europe/Madrid'});var p=ymd.split('-');var dd=new Date(Date.UTC(+p[0],+p[1]-1,+p[2],12,0,0));return dw[dd.getUTCDay()]+' '+dd.getUTCDate()+' '+mo[dd.getUTCMonth()];}
+function _koTime(utc){return new Date(utc).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Madrid'});}
+function _koTeam(o){if(!o)return {k:'',n:'Por definir',f:'🏳️'};var key=_tla2key(o.tla);var info=_TEAM[key];if(info)return {k:key,n:info.n,f:info.f};return {k:o.tla||'',n:o.shortName||o.name||'Por definir',f:'🏳️'};}
+function _koMatches(){if(!_matchesData||!_matchesData.matches)return [];var out=[];_matchesData.matches.forEach(function(m){var st=m.stage||'';if(st==='GROUP_STAGE')return;if(!_STAGE[st])return;if(!m.utcDate)return;var H=_koTeam(m.homeTeam),A=_koTeam(m.awayTeam);var sh=(m.score&&m.score.fullTime&&m.score.fullTime.home!=null)?m.score.fullTime.home:null;var sa=(m.score&&m.score.fullTime&&m.score.fullTime.away!=null)?m.score.fullTime.away:null;out.push({d:_koDateStr(m.utcDate),t:_koTime(m.utcDate),hk:H.k,hf:H.f,hn:H.n,ak:A.k,af:A.f,an:A.n,g:_STAGE[st],v:m.venue||'',tv:'',stage:st,_ko:true,_utc:m.utcDate,_sh:sh,_sa:sa,_status:m.status||''});});out.sort(function(a,b){return new Date(a._utc)-new Date(b._utc);});return out;}
+window._koCache=[];
+function _refreshKO(){window._koCache=_koMatches();}
+function _allM(){return MATCHES.concat(window._koCache||[]);}
+function buildBracket(){var el=document.getElementById('bracket');if(!el)return;var ko=(window._koCache&&window._koCache.length)?window._koCache:_koMatches();if(!ko.length){el.innerHTML='<div style="padding:14px;color:var(--mut);font-size:12px">El cuadro se rellenará automáticamente cuando empiece la fase eliminatoria.</div>';return;}var order=['LAST_32','LAST_16','QUARTER_FINALS','SEMI_FINALS','THIRD_PLACE','FINAL'];var byStage={};ko.forEach(function(m){(byStage[m.stage]=byStage[m.stage]||[]).push(m);});el.innerHTML=order.filter(function(s){return byStage[s];}).map(function(s){return '<div class="rc"><div class="rt">'+_STAGE[s]+'</div>'+byStage[s].map(function(m){var live=(m._status==='IN_PLAY'||m._status==='PAUSED');var sh=(m._sh!=null)?'<span style="font-weight:800;color:var(--navy);margin-left:auto">'+m._sh+'</span>':'';var sa=(m._sa!=null)?'<span style="font-weight:800;color:var(--navy);margin-left:auto">'+m._sa+'</span>':'';return '<div class="bm"><div style="font-size:8px;color:var(--mut);padding:3px 8px 0">'+m.d+' · '+(m.t||'')+(live?' · <span style=\"color:#e53935\">EN VIVO</span>':'')+'</div><div class="bt2" style="display:flex;align-items:center">'+m.hf+'<span class="bracket-ref" style="margin-left:4px">'+m.hn+'</span>'+sh+'</div><div class="bt2" style="display:flex;align-items:center">'+m.af+'<span class="bracket-ref" style="margin-left:4px">'+m.an+'</span>'+sa+'</div></div>';}).join('')+'</div>';}).join('');}
 
 // ===== COUNTDOWN INICIO =====
 function buildCountdown(){
@@ -740,7 +722,7 @@ function buildCountdown(){
 
 // ===== LIVE RESULTS — autorefresh cada 3 min =====
 let liveTimer=null, liveSeconds=300, liveFetching=false, liveBackoff=300, liveLastText=null, liveLastTs=0;
-function _hayPartidoEnJuego(){var mo={ene:0,feb:1,mar:2,abr:3,may:4,jun:5,jul:6,ago:7,sep:8,oct:9,nov:10,dic:11};var now=Date.now();for(var i=0;i<MATCHES.length;i++){var m=MATCHES[i];if(!m.d||!m.t)continue;var p=m.d.toLowerCase().split(' ');var day=parseInt(p[1]);var month=mo[(p[2]||'').substring(0,3)];if(isNaN(day)||month===undefined)continue;var hm=m.t.split(':');var ko=new Date(2026,month,day,parseInt(hm[0])||0,parseInt(hm[1])||0).getTime();if(now>=ko-2*60000&&now<=ko+2.5*3600000)return true;}return false;}
+function _hayPartidoEnJuego(){var mo={ene:0,feb:1,mar:2,abr:3,may:4,jun:5,jul:6,ago:7,sep:8,oct:9,nov:10,dic:11};var now=Date.now();var _L=_allM();for(var i=0;i<_L.length;i++){var m=_L[i];if(!m.d||!m.t)continue;var p=m.d.toLowerCase().split(' ');var day=parseInt(p[1]);var month=mo[(p[2]||'').substring(0,3)];if(isNaN(day)||month===undefined)continue;var hm=m.t.split(':');var ko=new Date(2026,month,day,parseInt(hm[0])||0,parseInt(hm[1])||0).getTime();if(now>=ko-2*60000&&now<=ko+2.5*3600000)return true;}return false;}
 function startLiveCountdown(){
   clearInterval(liveTimer);liveSeconds=liveBackoff;updateLiveCd();
   liveTimer=setInterval(()=>{if(liveFetching)return;liveSeconds--;updateLiveCd();if(liveSeconds<=0){liveSeconds=liveBackoff;if(_hayPartidoEnJuego()&&!document.hidden)fetchLive();}},1000);
@@ -975,7 +957,7 @@ async function fetchWorkerData(){
     _scorersData=await scRes.json();
     _matchesData=await mRes.json();
   }catch(e){console.warn('Worker no disponible:',e.message);}
-  buildGroups();buildStandings();buildMatches();buildGoleadores();buildLiveScores();
+  _refreshKO();buildGroups();buildStandings();buildDateChips();buildMatches();buildGoleadores();buildLiveScores();buildBracket();
 }
 function iniciarMundial(){
   buildGroups(); (function(){var _t=_todayStr();if(MATCHES.some(function(m){return m.d===_t;}))mdf=_t;buildDateChips();})(); buildMatches(); buildStdTabs(); buildStandings();
